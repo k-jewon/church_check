@@ -1,0 +1,29 @@
+{
+  "name": "church_check",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "교회 청년부 출석 프로그램 (속 단위 출석 입력 + A4 격자 PDF)",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "setpw": "tsx src/tools/setpw.ts",
+    "gen-template": "tsx src/tools/gen-template.ts",
+    "build": "tsc -p tsconfig.json",
+    "build:exe": "node build.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "exceljs": "^4.4.0",
+    "hono": "^4.6.14",
+    "puppeteer-core": "^23.10.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.28.1",
+    "postject": "^1.0.0-alpha.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

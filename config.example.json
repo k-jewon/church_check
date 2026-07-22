@@ -1,0 +1,7 @@
+{
+  "port": 3000,
+  "cookieSecret": "change-me-to-a-long-random-string",
+  "chromePath": null,
+  "inputPasswordHash": "",
+  "adminPasswordHash": ""
+}
