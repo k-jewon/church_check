@@ -6,9 +6,12 @@
 ```bash
 npm install
 cp config.example.json config.json
-npm run setpw -- input test1234     # 입력용 암호
-npm run setpw -- admin  admin1234    # 관리자용 암호
+npm run setpw -- input <입력용암호>     # 로그인 시 실제로 입력할 값
+npm run setpw -- admin  <관리자암호>
 ```
+> `<입력용암호>`/`<관리자암호>` 자리에 **직접 정한 값**을 넣는다. 로그인 화면에 칠 암호가 바로 그 값이다(예시 문자열을 그대로 쓰지 말 것).
+> 암호를 잊었으면 같은 `setpw` 명령을 다시 실행하면 `config.json` 의 해시가 덮어써진다. `config.json` 은 git에 올라가지 않으므로(암호 유출 방지) PC마다 따로 설정한다.
+
 PDF 확인까지 하려면 PC에 Chrome 또는 Edge가 있어야 한다(Windows는 Edge 기본 탑재).
 
 ## 1. 서버 실행
@@ -88,7 +91,32 @@ rm -f data/church.db data/church.db-wal data/church.db-shm
 ```
 다음 실행 때 빈 DB로 새로 시작된다. 명단·출석·방문자 전부 사라지니 주의.
 
+## 8. 종료 (서버 · 터널 내리기)
+
+### 개발 서버 (`npm run dev`)
+실행한 터미널에서 **`Ctrl+C`**. 백그라운드로 띄웠거나 창을 닫아 못 찾겠으면 프로세스로 종료:
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.CommandLine -like '*church_check*' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+```
+배포용 exe로 띄운 경우엔 `church_check.exe` 를 작업 관리자에서 끝내거나, 위 명령의 `node.exe` 를 `church_check.exe` 로 바꿔 실행한다.
+
+### cloudflared 터널
+터널을 실행한 터미널에서 **`Ctrl+C`**. 백그라운드면:
+```powershell
+Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+터널을 내리면 그 `https://….trycloudflare.com` 주소는 **즉시 무효**가 된다. 다시 열면 새 주소가 발급되므로, 실제 운영에선 매주 새 주소를 QR로 공유한다.
+
+### 확인
+포트가 아직 물려 있는지:
+```powershell
+netstat -ano | findstr :3000
+```
+아무것도 안 나오면 서버가 완전히 내려간 것이다.
+
 ## 자주 겪는 것
 - **PDF가 안 만들어짐**: Chrome/Edge 경로를 못 찾는 경우. `config.json` 의 `chromePath` 에 `msedge.exe`/`chrome.exe` 전체 경로를 넣는다.
-- **로그인이 안 됨**: `npm run setpw` 로 암호를 설정했는지, `config.json` 에 해시가 들어갔는지 확인.
+- **로그인이 안 됨 / "암호가 올바르지 않습니다"**: 로그인 암호는 `config.json` 에 설정된 값이지 문서의 예시가 아니다. 값을 모르면 `npm run setpw -- input <새암호>` 로 다시 설정(덮어쓰기)한 뒤 그 값으로 로그인.
 - **포트 충돌**: 이미 3000을 쓰는 프로세스가 있으면 `config.json` 의 `port` 변경.
