@@ -18,8 +18,9 @@ export const STATUSES: StatusDef[] = [
   { value: 'etc', label: '기타', symbol: '기타' },
 ];
 
-// 이분법 출석: 예배전·찬양중·찬양후·본당만 출석. etc·결석은 비출석.
-const ATTENDED_SET = new Set<Status>(['before', 'praise', 'after', 'main']);
+// 이분법 출석: 예배전·찬양중·찬양후·기타만 출석. 본당·결석은 비출석
+// (본당예배는 출석인원에 포함하지 않음).
+const ATTENDED_SET = new Set<Status>(['before', 'praise', 'after', 'etc']);
 
 export function isStatus(v: unknown): v is Status {
   return v === 'before' || v === 'praise' || v === 'after' || v === 'main' || v === 'etc';
@@ -104,6 +105,18 @@ export function searchUnmarked(date: string, query: string, limit = 20): Member[
        LIMIT ?`,
     )
     .all(q, date, limit) as unknown as Member[];
+  return sortRoster(rows);
+}
+
+// Active members with NO mark on the date (full list, sorted). For the 미출석 view.
+export function listUnmarked(date: string): Member[] {
+  const rows = db
+    .prepare(
+      `SELECT m.* FROM member m
+       WHERE m.active = 1
+         AND NOT EXISTS (SELECT 1 FROM attendance a WHERE a.member_id = m.id AND a.service_date = ?)`,
+    )
+    .all(date) as unknown as Member[];
   return sortRoster(rows);
 }
 

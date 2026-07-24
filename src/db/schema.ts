@@ -3,7 +3,7 @@ export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS member (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL,
-  birth_year  INTEGER NOT NULL,
+  birth_year  INTEGER,
   sok         TEXT    NOT NULL,
   role        TEXT    NOT NULL CHECK (role IN ('속장','부속장','속원')),
   active      INTEGER NOT NULL DEFAULT 1,

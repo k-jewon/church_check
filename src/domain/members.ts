@@ -7,14 +7,14 @@ const ROLE_RANK: Record<Role, number> = { 속장: 0, 부속장: 1, 속원: 2 };
 export interface Member {
   id: number;
   name: string;
-  birth_year: number; // 4-digit
+  birth_year: number | null; // 4-digit; null for 방문자 등 미입력
   sok: string;
   role: Role;
   active: number; // 0 | 1
 }
 export interface NewMember {
   name: string;
-  birth_year: number;
+  birth_year: number | null;
   sok: string;
   role: Role;
 }
@@ -30,7 +30,9 @@ export function normalizeBirthYear(raw: unknown): number | null {
 }
 
 // Display as 2-digit with leading zero: 2000 -> "00", 1997 -> "97".
-export function formatBirthYear(year: number): string {
+// null(미입력) -> "".
+export function formatBirthYear(year: number | null): string {
+  if (year === null) return '';
   return String(year % 100).padStart(2, '0');
 }
 
