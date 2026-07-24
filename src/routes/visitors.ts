@@ -40,7 +40,7 @@ visitorRoutes.get('/', async (c) => {
       <ul class="member-list">${rows}</ul>
       ${isAdmin ? raw('') : html`<p class="muted">승격(속 배정)은 관리자만 할 수 있습니다.</p>`}
     </div>`;
-  return c.html(page({ title: '방문자 대장', role, body }));
+  return c.html(page({ title: '방문자 대장', section: 'input', role, body }));
 });
 
 // ---- 등록 폼 ----
@@ -73,7 +73,7 @@ visitorRoutes.get('/new', async (c) => {
         <button type="submit">등록</button>
       </form>
     </div>`;
-  return c.html(page({ title: '새 방문자 등록', role, body }));
+  return c.html(page({ title: '새 방문자 등록', section: 'input', role, body }));
 });
 
 visitorRoutes.post('/new', async (c) => {
@@ -155,9 +155,10 @@ function str(v: unknown): string | null {
   return s || null;
 }
 
-function errorPage(message: string, back: string, role: string | null) {
+function errorPage(message: string, back: string, role: 'input' | 'admin' | null) {
   return page({
     title: '오류',
+    section: 'input',
     role,
     body: html`<div class="card"><h1>오류</h1><p class="error">${message}</p><a href="${back}">돌아가기</a></div>`,
   });

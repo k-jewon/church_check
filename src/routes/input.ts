@@ -4,6 +4,7 @@ import { formatBirthYear, type Member } from '../domain/members.js';
 import {
   isStatus,
   labelOf,
+  listUnmarked,
   marksForDate,
   mark,
   searchUnmarked,
@@ -15,11 +16,13 @@ import {
   type Status,
 } from '../domain/attendance.js';
 import { currentSunday, isSunday, recentSundays } from '../domain/sundays.js';
+import { currentRole } from '../auth/middleware.js';
 
 export const inputRoutes = new Hono();
 
 function memberLabel(m: Member): string {
-  return `${m.name}(${formatBirthYear(m.birth_year)}) - ${m.sok}`;
+  const by = formatBirthYear(m.birth_year);
+  return by ? `${m.name}(${by}) - ${m.sok}` : `${m.name} - ${m.sok}`;
 }
 
 function resolveDate(raw: string | undefined): string {
@@ -28,7 +31,8 @@ function resolveDate(raw: string | undefined): string {
 }
 
 // ---- main input page ----
-inputRoutes.get('/', (c) => {
+inputRoutes.get('/', async (c) => {
+  const role = await currentRole(c);
   const date = resolveDate(c.req.query('date'));
   const sundays = recentSundays(new Date(), 8).reverse(); // most recent first
   if (!sundays.includes(date)) sundays.unshift(date);
@@ -64,7 +68,7 @@ inputRoutes.get('/', (c) => {
 
       <p><a href="/input/status?date=${date}">오늘 입력 현황 보기 →</a></p>
     </div>`;
-  return c.html(page({ title: '출석 입력', role: 'input', body }));
+  return c.html(page({ title: '출석 입력', section: 'input', role, body }));
 });
 
 // ---- search-as-you-type (returns <li> list) ----
@@ -114,40 +118,84 @@ inputRoutes.post('/input/unmark', async (c) => {
 });
 
 // ---- "오늘 입력 현황" (full page; corrections happen here) ----
-inputRoutes.get('/input/status', (c) => {
+inputRoutes.get('/input/status', async (c) => {
+  const role = await currentRole(c);
   const date = resolveDate(c.req.query('date'));
   const marked = marksForDate(date);
   const counts = statusCounts(date);
   const unmarked = unmarkedCount(date);
+  const roster = marked.length + unmarked; // 활성 전체 명단 (입력됨 + 미출석)
+
+  // pill 클릭 시 필터: 상태값 | 'unmarked'(미출석 명단) | 없음(입력 전체)
+  const filterQ = c.req.query('filter');
+  const statusFilter = isStatus(filterQ) ? filterQ : null;
+  const unmarkedView = filterQ === 'unmarked';
+
+  const pill = (href: string, active: boolean, label: Raw) =>
+    html`<a class="count-pill ${active ? raw('active') : raw('')}" href="${href}">${label}</a>`;
 
   const summary = html`
     <div class="counts">
-      ${STATUSES.map((s) => html`<span class="count-pill">${s.label} ${s.symbol} <strong>${counts[s.value]}</strong></span>`)}
-      <span class="count-pill muted">미출석 <strong>${unmarked}</strong></span>
+      ${pill(`/input/status?date=${date}`, !unmarkedView && statusFilter === null, html`입력됨 <strong>${marked.length}</strong>`)}
+      ${STATUSES.map((s) =>
+        pill(
+          `/input/status?date=${date}&filter=${s.value}`,
+          !unmarkedView && statusFilter === s.value,
+          html`${s.label} ${s.symbol} <strong>${counts[s.value]}</strong>`,
+        ),
+      )}
+      ${pill(`/input/status?date=${date}&filter=unmarked`, unmarkedView, html`미출석 <strong>${unmarked}</strong> / ${roster}`)}
     </div>`;
 
-  const rows = marked.length
-    ? marked.map(
-        (m) => html`
-          <li>
-            <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok} · ${m.role}</span>
-            <span class="row-actions">
-              <form method="post" action="/input/status/set" class="inline">
-                <input type="hidden" name="memberId" value="${m.id}" />
-                <input type="hidden" name="date" value="${date}" />
-                <select name="status" onchange="this.form.submit()">
-                  ${STATUSES.map((s) => html`<option value="${s.value}" ${s.value === m.status ? raw('selected') : raw('')}>${s.label} ${s.symbol}</option>`)}
-                </select>
-              </form>
-              <form method="post" action="/input/status/unmark" class="inline">
-                <input type="hidden" name="memberId" value="${m.id}" />
-                <input type="hidden" name="date" value="${date}" />
-                <button type="submit" class="linklike">취소</button>
-              </form>
-            </span>
-          </li>`,
-      )
-    : html`<li class="muted">아직 입력된 사람이 없습니다.</li>`;
+  let rows: Raw;
+  if (unmarkedView) {
+    const list = listUnmarked(date);
+    rows = list.length
+      ? html`${list.map(
+          (m) => html`
+            <li>
+              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok} · ${m.role}</span>
+              <span class="row-actions">
+                <form method="post" action="/input/status/set" class="inline">
+                  <input type="hidden" name="memberId" value="${m.id}" />
+                  <input type="hidden" name="date" value="${date}" />
+                  <input type="hidden" name="filter" value="unmarked" />
+                  <select name="status" onchange="this.form.submit()">
+                    <option value="" selected disabled>출석 입력</option>
+                    ${STATUSES.map((s) => html`<option value="${s.value}">${s.label} ${s.symbol}</option>`)}
+                  </select>
+                </form>
+              </span>
+            </li>`,
+        )}`
+      : html`<li class="muted">미출석 인원이 없습니다.</li>`;
+  } else {
+    const shown = statusFilter ? marked.filter((m) => m.status === statusFilter) : marked;
+    rows = shown.length
+      ? html`${shown.map(
+          (m) => html`
+            <li>
+              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok} · ${m.role}</span>
+              <span class="row-actions">
+                <form method="post" action="/input/status/set" class="inline">
+                  <input type="hidden" name="memberId" value="${m.id}" />
+                  <input type="hidden" name="date" value="${date}" />
+                  <input type="hidden" name="filter" value="${statusFilter ?? ''}" />
+                  <select name="status" onchange="this.form.submit()">
+                    ${STATUSES.map((s) => html`<option value="${s.value}" ${s.value === m.status ? raw('selected') : raw('')}>${s.label} ${s.symbol}</option>`)}
+                  </select>
+                </form>
+                <form method="post" action="/input/status/unmark" class="inline">
+                  <input type="hidden" name="memberId" value="${m.id}" />
+                  <input type="hidden" name="date" value="${date}" />
+                  <input type="hidden" name="filter" value="${statusFilter ?? ''}" />
+                  <button type="submit" class="linklike">취소</button>
+                </form>
+              </span>
+            </li>`,
+        )}`
+      : html`<li class="muted">${statusFilter ? '해당 상태로 입력된 사람이 없습니다.' : '아직 입력된 사람이 없습니다.'}</li>`;
+  }
 
   const body = html`
     <div class="card">
@@ -157,8 +205,13 @@ inputRoutes.get('/input/status', (c) => {
       <ul class="member-list">${rows}</ul>
       <p><a href="/?date=${date}">← 입력으로</a></p>
     </div>`;
-  return c.html(page({ title: '오늘 입력 현황', role: 'input', body }));
+  return c.html(page({ title: '오늘 입력 현황', section: 'input', role, body }));
 });
+
+// 처리 후 보고 있던 필터 뷰를 유지한다.
+function statusBack(date: string, filter: string): string {
+  return filter ? `/input/status?date=${date}&filter=${encodeURIComponent(filter)}` : `/input/status?date=${date}`;
+}
 
 inputRoutes.post('/input/status/set', async (c) => {
   const body = await c.req.parseBody();
@@ -166,7 +219,7 @@ inputRoutes.post('/input/status/set', async (c) => {
   const date = resolveDate(String(body.date));
   const status = String(body.status);
   if (memberId && isStatus(status)) mark(memberId, date, status);
-  return c.redirect(`/input/status?date=${date}`);
+  return c.redirect(statusBack(date, String(body.filter ?? '')));
 });
 
 inputRoutes.post('/input/status/unmark', async (c) => {
@@ -174,7 +227,7 @@ inputRoutes.post('/input/status/unmark', async (c) => {
   const memberId = Number(body.memberId);
   const date = resolveDate(String(body.date));
   if (memberId) unmark(memberId, date);
-  return c.redirect(`/input/status?date=${date}`);
+  return c.redirect(statusBack(date, String(body.filter ?? '')));
 });
 
 // ---- fragment helpers ----

@@ -32,20 +32,48 @@ export function html(strings: TemplateStringsArray, ...values: unknown[]): Raw {
   return new Raw(out);
 }
 
-// Full HTML document with mobile viewport, shared CSS, and htmx.
-export function page(opts: { title: string; role?: string | null; body: Raw }): string {
-  const nav = opts.role
-    ? html`<nav class="topnav">
+// 화면이 속한 기능 영역. 네비 색·배지·메뉴 구성을 결정한다.
+type Section = 'admin' | 'input';
+
+// 모드별 네비게이션. 각 모드는 자기 메뉴 + 반대 모드로 넘어가는 전환 링크만 노출한다.
+function nav(section: Section, role: 'input' | 'admin' | null): Raw {
+  if (section === 'admin') {
+    return html`<nav class="topnav">
         <span class="brand">청년부 출석</span>
+        <span class="mode-badge admin">관리자 모드</span>
         <span class="spacer"></span>
-        ${opts.role === 'admin' ? html`<a href="/admin">관리</a>` : raw('')}
-        <a href="/">입력</a>
-        <a href="/visitors">방문자</a>
+        <a href="/admin">관리 홈</a>
+        <a class="mode-switch" href="/">입력 모드로 →</a>
         <form method="post" action="/logout" class="inline">
           <button class="linklike" type="submit">로그아웃</button>
         </form>
-      </nav>`
-    : raw('');
+      </nav>`;
+  }
+  return html`<nav class="topnav">
+      <span class="brand">청년부 출석</span>
+      <span class="mode-badge input">입력 모드</span>
+      <span class="spacer"></span>
+      <a href="/">입력</a>
+      <a href="/visitors">방문자</a>
+      ${role === 'admin' ? html`<a class="mode-switch" href="/admin">관리자 모드로 →</a>` : raw('')}
+      <form method="post" action="/logout" class="inline">
+        <button class="linklike" type="submit">로그아웃</button>
+      </form>
+    </nav>`;
+}
+
+// Full HTML document with mobile viewport, shared CSS, and htmx.
+// section: 화면 영역(색·배지). 생략 시 네비 없음(로그인 화면).
+// role: 실제 세션 권한 — 입력 모드에서 관리자에게만 전환 링크를 보이는 데 쓴다.
+export function page(opts: {
+  title: string;
+  section?: Section | null;
+  role?: 'input' | 'admin' | null;
+  body: Raw;
+}): string {
+  const section = opts.section ?? null;
+  const topnav = section ? nav(section, opts.role ?? null) : raw('');
+  const bodyClass = section ? `mode-${section}` : '';
   return (
     '<!doctype html>' +
     render(html`<html lang="ko">
@@ -56,8 +84,8 @@ export function page(opts: { title: string; role?: string | null; body: Raw }): 
         <link rel="stylesheet" href="/public/app.css" />
         <script src="/public/htmx.min.js" defer></script>
       </head>
-      <body>
-        ${nav}
+      <body class="${bodyClass}">
+        ${topnav}
         <main>${opts.body}</main>
       </body>
     </html>`)

@@ -43,7 +43,7 @@ adminRoutes.get('/', (c) => {
         <li><a href="/admin/backup">전체 백업 다운로드</a></li>
       </ul>
     </div>`;
-  return c.html(page({ title: '관리', role: 'admin', body }));
+  return c.html(page({ title: '관리', section: 'admin', body }));
 });
 
 // ---- Member list + add form ----
@@ -83,7 +83,7 @@ adminRoutes.get('/members', (c) => {
       <h2>성도 추가</h2>
       ${memberForm({ action: '/admin/members' })}
     </div>`;
-  return c.html(page({ title: '명단 관리', role: 'admin', body }));
+  return c.html(page({ title: '명단 관리', section: 'admin', body }));
 });
 
 adminRoutes.post('/members', async (c) => {
@@ -102,7 +102,7 @@ adminRoutes.get('/members/:id/edit', (c) => {
       <h1>성도 수정</h1>
       ${memberForm({ action: `/admin/members/${m.id}`, member: m })}
     </div>`;
-  return c.html(page({ title: '성도 수정', role: 'admin', body }));
+  return c.html(page({ title: '성도 수정', section: 'admin', body }));
 });
 
 adminRoutes.post('/members/:id', async (c) => {
@@ -153,7 +153,7 @@ adminRoutes.get('/upload', (c) => {
               <button type="submit">업로드</button>
             </form>
           </div>`;
-  return c.html(page({ title: '명단 업로드', role: 'admin', body }));
+  return c.html(page({ title: '명단 업로드', section: 'admin', body }));
 });
 
 adminRoutes.post('/upload', async (c) => {
@@ -176,7 +176,7 @@ adminRoutes.post('/upload', async (c) => {
         <ul>${errors.map((e) => html`<li>${e}</li>`)}</ul>
         <a href="/admin/upload">다시 시도</a>
       </div>`;
-    return c.html(page({ title: '업로드 오류', role: 'admin', body: body2 }), 400);
+    return c.html(page({ title: '업로드 오류', section: 'admin', body: body2 }), 400);
   }
   if (!members.length) {
     return c.html(errorPage('유효한 행이 없습니다.', '/admin/upload'), 400);
@@ -240,7 +240,7 @@ adminRoutes.get('/report', (c) => {
         document.getElementById('from').value=sun(3);
       }
     </script>`;
-  return c.html(page({ title: '출석부 PDF', role: 'admin', body }));
+  return c.html(page({ title: '출석부 PDF', section: 'admin', body }));
 });
 
 adminRoutes.get('/report/preview', (c) => {
@@ -277,7 +277,7 @@ function memberForm(opts: { action: string; member?: Member }) {
   return html`
     <form method="post" action="${opts.action}">
       <label>이름<input name="name" value="${m?.name ?? ''}" required /></label>
-      <label>출생연도 (2자리 또는 4자리)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" required /></label>
+      <label>출생연도 (2자리 또는 4자리 · 방문자는 생략 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
       <label>속<input name="sok" value="${m?.sok ?? ''}" required /></label>
       <label>직분
         <select name="role">
@@ -288,14 +288,15 @@ function memberForm(opts: { action: string; member?: Member }) {
     </form>`;
 }
 
-type ParsedForm = { value: { name: string; birth_year: number; sok: string; role: Member['role'] } } | { error: string };
+type ParsedForm = { value: { name: string; birth_year: number | null; sok: string; role: Member['role'] } } | { error: string };
 function parseMemberForm(body: Record<string, unknown>): ParsedForm {
   const name = String(body.name ?? '').trim();
   const sok = String(body.sok ?? '').trim();
   const role = String(body.role ?? '').trim();
-  const birth = normalizeBirthYear(body.birth_year);
+  const birthRaw = String(body.birth_year ?? '').trim();
+  const birth = birthRaw === '' ? null : normalizeBirthYear(birthRaw);
   if (!name) return { error: '이름을 입력하세요.' };
-  if (birth === null) return { error: '출생연도가 올바르지 않습니다.' };
+  if (birthRaw !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
   if (!sok) return { error: '속을 입력하세요.' };
   if (!isRole(role)) return { error: '직분이 올바르지 않습니다.' };
   return { value: { name, birth_year: birth, sok, role } };
@@ -304,7 +305,7 @@ function parseMemberForm(body: Record<string, unknown>): ParsedForm {
 function errorPage(message: string, back: string) {
   return page({
     title: '오류',
-    role: 'admin',
+    section: 'admin',
     body: html`<div class="card"><h1>오류</h1><p class="error">${message}</p><a href="${back}">돌아가기</a></div>`,
   });
 }
