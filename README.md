@@ -9,7 +9,8 @@
 - 출석부 PDF: 속 단위 격자(속장 생년순 배치) + **새가족·군인·방문·출석합계 섹션 자동 분리**, A4 1장 축소(과밀 시 다중 페이지)
 - 최초 방문자 대장 + 관리자 승격(속 배정)
 - 전체 백업 다운로드
-- 2단계 암호(입력용 / 관리자용) — **입력 모드**(파란 네비)와 **관리자 모드**(주황 네비)를 색·배지로 구별, 관리자는 모드 전환 링크로 이동
+- 폰 접속용 QR: 서버가 cloudflared 터널을 자동으로 열고 접속 URL·QR을 콘솔과 **관리 → 폰 접속(QR)** 화면에 표시
+- 2단계 암호(입력용 / 관리자용) — 최초 실행 시 콘솔에서 설정. **입력 모드**(파란 네비)와 **관리자 모드**(주황 네비)를 색·배지로 구별, 관리자는 모드 전환 링크로 이동
 
 ## 출석률 규칙
 출석 = `예배전·찬양중·찬양후·기타`. **본당·결석은 비출석**(본당예배는 심볼 `본`으로 표시만 되고 출석인원에는 포함하지 않는다. 분모는 기간 내 주일 수 유지). 속 이동 이력은 추적하지 않고 **현재 속** 기준으로 묶는다.
@@ -66,21 +67,24 @@ dist/
 └── config.example.json
 ```
 
+> **exe는 반드시 Windows(또는 Windows용 node.exe)에서 빌드**해야 한다. `build.mjs` 가 실행 중인 Node 바이너리를 복사하는 구조라, macOS에서 돌리면 PE 서명 제거 단계에서 실패한다.
+
 **PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재). exe에 Chromium을 넣지 않아 용량을 줄였다. Chrome/Edge가 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
 
 ### 교회 PC에서 최초 설정
 1. `dist/` 폴더를 통째로 PC에 복사.
-2. `config.example.json` → `config.json` 복사 후 암호 설정. (개발 PC에서 `npm run setpw` 로 만든 `config.json` 을 그대로 복사해도 됨.)
-3. `start.bat` 더블클릭 → `http://localhost:3000` 에서 서버 실행.
+2. `start.bat` 더블클릭 → 서버 실행.
+   - **최초 1회**: 콘솔 창에서 **입력용 암호**·**관리자 암호**를 물어본다(입력 글자는 화면에 안 보임). 입력하면 `config.json` 이 자동 생성된다. 개발 PC에서 만든 `config.json` 을 미리 복사해 두면 이 단계는 건너뛴다.
+   - 이후 실행부터는 바로 서버가 뜬다. `http://localhost:3000` 접속. **창을 닫으면 서버가 종료**된다.
 
-### 폰에서 접속 (외부 터널)
-로컬 서버를 인터넷에 노출하지 않고 폰에서 접속하려면 [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 를 설치하고:
+### 폰에서 접속 (외부 터널 + QR 자동)
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 만 있으면 서버가 **자동으로 터널을 열고 접속용 QR을 만든다**. 설치(PATH 등록) 하거나 **`cloudflared.exe` 를 `church_check.exe` 옆에 두면** 된다.
 
-```bash
-cloudflared tunnel --url http://localhost:3000
-```
+- 서버를 켜면 콘솔 창에 접속 URL과 QR이 출력된다.
+- 관리자로 로그인 → **관리 → 폰 접속(QR)** 화면에서도 QR·URL을 볼 수 있다(폰으로 스캔·공유하기 편함).
+- cloudflared 가 없으면 터널은 건너뛰고 로컬(같은 Wi-Fi에서 이 PC의 IP)로만 접속 가능하다.
 
-출력되는 `https://xxxx.trycloudflare.com` 링크를 폰에서 연다. **이 URL은 실행할 때마다 바뀌므로** 매주 QR로 새로 공유한다. URL이 공개되므로 앱 로그인(암호)이 유일한 접근 통제다.
+> **이 URL은 서버를 껐다 켤 때마다 바뀐다.** URL이 공개되므로 앱 로그인(암호)이 유일한 접근 통제다.
 
 ### 백업
 - 관리자 → **전체 백업 다운로드** 로 DB 스냅샷(`.db`)을 받는다.

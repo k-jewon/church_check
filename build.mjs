@@ -86,21 +86,14 @@ copyFileSync(resolve(root, 'config.example.json'), resolve(dist, 'config.example
 const startBat = `@echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-if not exist config.json (
-  echo [최초 실행] config.json 이 없습니다. config.example.json 을 복사한 뒤
-  echo 암호를 설정해야 합니다. README 를 참고하세요.
-  pause
-  exit /b
-)
 echo church_check 서버를 시작합니다...
-start "church_check" church_check.exe
-timeout /t 2 >nul
+echo  - 최초 실행이면 입력용/관리자 암호를 물어봅니다.
+echo  - cloudflared 가 설치돼 있으면 외부 접속용 QR이 아래에 표시됩니다.
+echo  - 종료하려면 이 창을 닫거나 Ctrl+C 를 누르세요.
 echo.
-echo  서버:  http://localhost:3000
-echo  외부(폰) 접속용 터널을 열려면 새 창에서:
-echo     cloudflared tunnel --url http://localhost:3000
+church_check.exe
 echo.
-echo  이 창을 닫아도 서버는 계속 실행됩니다. 종료하려면 작업 관리자에서 church_check.exe 를 끝내세요.
+echo 서버가 종료되었습니다.
 pause
 `;
 writeFileSync(resolve(dist, 'start.bat'), startBat);

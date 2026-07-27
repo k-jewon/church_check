@@ -29,7 +29,9 @@ PDF 확인까지 하려면 PC에 Chrome 또는 Edge가 있어야 한다(Windows�
 ```bash
 npm run dev      # 파일 변경 시 자동 재시작 (tsx watch)
 ```
-콘솔에 `church_check listening on http://localhost:3000` 이 뜨면 브라우저로 접속.
+- **최초 실행**(`config.json` 에 암호가 없을 때)이면 서버가 콘솔에서 **입력용/관리자 암호**를 먼저 물어본 뒤 시작한다(입력 글자는 화면에 안 보임). 이미 설정돼 있으면 바로 시작.
+- 콘솔에 `church_check listening on http://localhost:3000` 이 뜨면 브라우저로 접속.
+- 이어서 **외부 접속 터널 상태**가 표시된다: cloudflared 가 있으면 접속 URL과 QR가, 없으면 "건너뜁니다" 안내가 나온다(로컬 사용엔 문제 없음). → 아래 2절.
 
 - 입력용 암호로 로그인하면 **입력 모드**, 관리자 암호로 로그인하면 관리 화면(**관리자 모드**)까지 접근.
 - **모드 구분(색·배지)**: 화면이 어느 영역인지 상단 네비 바로 구별된다.
@@ -41,7 +43,9 @@ npm run dev      # 파일 변경 시 자동 재시작 (tsx watch)
 1. `F12` → 좌상단 **기기 툴바 토글**(`Ctrl+Shift+M`).
 2. 기기를 iPhone 등으로 바꾸면 폭이 좁아지며 실제 폰 레이아웃 확인 가능.
 
-같은 Wi‑Fi의 진짜 폰으로 보려면 PC의 랜 IP로 접속(`http://<PC-IP>:3000`). 외부/터널은 README의 cloudflared 참고.
+같은 Wi‑Fi의 진짜 폰으로 보려면 PC의 랜 IP로 접속(`http://<PC-IP>:3000`).
+
+**다른 망(외부) 폰**은 cloudflared 가 있으면 서버가 **부팅 시 자동으로 터널을 열고 QR을 만든다**. 콘솔에 찍힌 URL·QR로 접속하거나, **관리 → 폰 접속(QR)** 화면의 QR을 스캔한다. cloudflared 설치·배치 방법은 README 참고(설치하지 않았으면 이 단계는 자동으로 건너뛴다).
 
 ## 3. 테스트용 명단 넣기
 샘플 명단(예시 이미지 이름 일부)을 만들어 업로드하면 바로 화면이 채워진다.
@@ -75,6 +79,10 @@ npx tsx src/tools/gen-sample.ts sample-roster.xlsx
 
 ### 관리 → 전체 백업 다운로드
 - 현재 DB 스냅샷(`.db`)을 내려받는다. 다른 곳에 열어 데이터가 온전한지 확인 가능.
+
+### 관리 → 폰 접속(QR)
+- 서버가 자동으로 연 cloudflared 터널의 **접속 URL과 QR 이미지**를 보여준다. 폰으로 스캔하거나 링크를 공유하면 된다.
+- 터널이 아직 안 열렸거나 cloudflared 가 없으면 안내 문구만 뜬다(콘솔 로그로 상태 확인).
 
 ## 5. 리포트를 의미 있게 보려면 (출석 데이터 시드)
 빈 출석으로는 리포트가 밋밋하다. 몇 주치 출석을 빠르게 넣으려면 입력 화면에서 여러 주일·상태로 직접 찍거나, 아래처럼 직접 넣는다(연속 결석 강조도 확인 가능).
@@ -116,7 +124,7 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
 배포용 exe로 띄운 경우엔 `church_check.exe` 를 작업 관리자에서 끝내거나, 위 명령의 `node.exe` 를 `church_check.exe` 로 바꿔 실행한다.
 
 ### cloudflared 터널
-터널을 실행한 터미널에서 **`Ctrl+C`**. 백그라운드면:
+이제 터널은 **서버가 자식 프로세스로 자동 실행**하므로, 위처럼 서버를 정상 종료하면 대개 함께 내려간다. 강제 종료 등으로 남아 있으면 직접 정리:
 ```powershell
 Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force
 ```

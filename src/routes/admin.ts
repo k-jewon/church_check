@@ -23,6 +23,8 @@ import { buildGrid } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
 import { renderPdf } from '../report/pdf.js';
 import { currentSunday, recentSundays } from '../domain/sundays.js';
+import { getTunnelUrl } from '../setup/tunnel.js';
+import QRCode from 'qrcode';
 
 const REPORT_TITLE = '청년부';
 
@@ -41,6 +43,7 @@ adminRoutes.get('/', (c) => {
         <li><a href="/admin/template">명단 템플릿 내려받기</a></li>
         <li><a href="/admin/report">출석부 PDF 만들기</a></li>
         <li><a href="/admin/backup">전체 백업 다운로드</a></li>
+        <li><a href="/admin/tunnel">폰 접속(QR)</a></li>
       </ul>
     </div>`;
   return c.html(page({ title: '관리', section: 'admin', body }));
@@ -211,6 +214,26 @@ adminRoutes.get('/backup', (c) => {
       /* ignore */
     }
   }
+});
+
+// ---- phone access (cloudflared tunnel QR) ----
+adminRoutes.get('/tunnel', async (c) => {
+  const url = getTunnelUrl();
+  const body = url
+    ? html`
+        <div class="card">
+          <h1>폰 접속 (QR)</h1>
+          <p>폰 카메라로 아래 QR을 찍으면 이 화면에 접속됩니다.</p>
+          <img src="${await QRCode.toDataURL(url, { margin: 1, width: 320 })}" alt="접속 QR" style="max-width:320px;width:100%;height:auto" />
+          <p><a href="${url}">${url}</a></p>
+          <p class="muted">이 주소는 서버를 끄면 사라지고, 다시 켜면 새 주소가 생깁니다.</p>
+        </div>`
+    : html`
+        <div class="card">
+          <h1>폰 접속 (QR)</h1>
+          <p class="muted">아직 외부 접속 주소가 준비되지 않았습니다. cloudflared 가 설치돼 있으면 잠시 뒤 새로고침 하세요. 없으면 같은 Wi-Fi에서 이 PC의 IP로 접속하세요.</p>
+        </div>`;
+  return c.html(page({ title: '폰 접속(QR)', section: 'admin', body }));
 });
 
 // ---- report (PDF) ----
