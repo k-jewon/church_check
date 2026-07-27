@@ -53,23 +53,39 @@ npm run dev          # http://localhost:3000
 
 ## 배포 (단일 실행파일)
 
-```bash
+`build.mjs` 가 **빌드에 사용한 node.exe를 그대로 복사**해 exe를 만든다. 따라서 **반드시 Windows에서 Windows용 Node로** 빌드해야 한다(macOS/Linux에서 돌리면 PE 서명 제거 단계에서 `not a PE file` 로 실패).
+
+### 사전 준비 (1회)
+1. **Node.js 24.x 설치** — 개발·검증에 쓴 버전(`node:sqlite` 가 플래그 없이 동작, 최소 22.5+). [nodejs.org](https://nodejs.org) 의 Windows Installer(.msi)로 설치 후 `node -v` 로 확인.
+2. 소스 가져오기 + **빌드 도구 포함** 의존성 설치:
+   ```
+   git clone https://github.com/k-jewon/church_check.git
+   cd church_check
+   npm install
+   ```
+
+### 빌드
+```
 npm run build:exe
 ```
-
-`dist/` 폴더에 배포 세트가 생성된다:
-
+esbuild 번들 → SEA blob 생성 → node.exe 복사·서명 제거 → blob 주입 순으로 진행된다. 완료되면 `dist/` 에 배포 세트가 생성된다:
 ```
 dist/
-├── church_check.exe     # Node 런타임 내장 (Chromium 미포함)
+├── church_check.exe     # Node 런타임 내장 (Chromium 미포함, ~90MB)
 ├── start.bat            # 더블클릭 실행
 ├── public/  template/   # 정적 자산 (exe 옆에 있어야 함)
 └── config.example.json
 ```
 
-> **exe는 반드시 Windows(또는 Windows용 node.exe)에서 빌드**해야 한다. `build.mjs` 가 실행 중인 Node 바이너리를 복사하는 구조라, macOS에서 돌리면 PE 서명 제거 단계에서 실패한다.
-
 **PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재). exe에 Chromium을 넣지 않아 용량을 줄였다. Chrome/Edge가 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
+
+### 빌드 문제 해결
+| 증상 | 원인 / 해결 |
+|---|---|
+| `Error: not a PE file` | macOS/Linux에서 빌드함 → 반드시 Windows에서 빌드 |
+| 실행 시 `node:sqlite` 관련 오류 | Node 버전이 낮음 → 22.5+ (권장 24)로 다시 빌드 |
+| `postject`/`esbuild` 없음 | `npm install` 을 `--production` 으로 함 → 그냥 `npm install` |
+| exe는 뜨는데 화면이 깨짐 | `public/`·`template/` 이 exe 옆에 없음 → `dist/` 통째로 복사 |
 
 ### 교회 PC에서 최초 설정
 1. `dist/` 폴더를 통째로 PC에 복사.
