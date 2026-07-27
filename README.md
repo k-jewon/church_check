@@ -53,11 +53,17 @@ npm run dev          # http://localhost:3000
 
 ## 배포 (단일 실행파일)
 
-`build.mjs` 가 **빌드에 사용한 node.exe를 그대로 복사**해 exe를 만든다. 따라서 **반드시 Windows에서 Windows용 Node로** 빌드해야 한다(macOS/Linux에서 돌리면 PE 서명 제거 단계에서 `not a PE file` 로 실패).
+`build.mjs` 가 **빌드에 사용한 Node 바이너리를 복사**해 단일 실행파일을 만든다(Node SEA). **크로스 컴파일은 불가** — Windows용은 Windows에서, macOS용은 macOS에서 **각각** 빌드해야 한다. `npm run build:exe` 는 현재 OS를 감지해 알맞은 산출물을 만든다.
+
+| 대상 | 산출물 | 처리 |
+|---|---|---|
+| **Windows** | `church_check.exe` + `start.bat` | Authenticode 서명 제거 → blob 주입 |
+| **macOS** | `church_check` + `start.command` | 유니버설→호스트 arch로 thin → blob 주입 → ad-hoc 재서명 |
 
 ### 사전 준비 (1회)
-1. **Node.js 24.x 설치** — 개발·검증에 쓴 버전(`node:sqlite` 가 플래그 없이 동작, 최소 22.5+). [nodejs.org](https://nodejs.org) 의 Windows Installer(.msi)로 설치 후 `node -v` 로 확인.
-2. 소스 가져오기 + **빌드 도구 포함** 의존성 설치:
+1. **Node.js 24.x 설치** — 빌드하려는 OS에서(개발·검증 버전, `node:sqlite` 무플래그 동작, 최소 22.5+). [nodejs.org](https://nodejs.org) → `node -v` 확인.
+2. **macOS만**: `codesign`·`lipo` 필요(Xcode Command Line Tools). 대개 설치돼 있고, 없으면 `xcode-select --install`.
+3. 소스 가져오기 + **빌드 도구 포함** 의존성 설치:
    ```
    git clone https://github.com/k-jewon/church_check.git
    cd church_check
@@ -68,33 +74,38 @@ npm run dev          # http://localhost:3000
 ```
 npm run build:exe
 ```
-esbuild 번들 → SEA blob 생성 → node.exe 복사·서명 제거 → blob 주입 순으로 진행된다. 완료되면 `dist/` 에 배포 세트가 생성된다:
+esbuild 번들 → SEA blob 생성 → 런타임 복사·서명 → blob 주입 순으로 진행된다. 완료되면 `dist/` 에 배포 세트가 생성된다:
 ```
 dist/
-├── church_check.exe     # Node 런타임 내장 (Chromium 미포함, ~90MB)
-├── start.bat            # 더블클릭 실행
-├── public/  template/   # 정적 자산 (exe 옆에 있어야 함)
+├── church_check(.exe)          # Node 런타임 내장 (Chromium 미포함, ~90–130MB)
+├── start.bat / start.command   # 더블클릭 실행 (OS별)
+├── public/  template/          # 정적 자산 (실행파일 옆에 있어야 함)
 └── config.example.json
 ```
 
-**PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재). exe에 Chromium을 넣지 않아 용량을 줄였다. Chrome/Edge가 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
+**PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재, macOS는 Chrome 등 필요). 실행파일에 Chromium을 넣지 않아 용량을 줄였다. 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
+
+> **macOS 실행파일은 빌드한 아키텍처 전용**이다. Apple Silicon(arm64)에서 빌드하면 arm64 맥에서만 실행된다. Intel 맥 대상이면 Intel 맥에서(또는 `arch -x86_64` 환경으로) 빌드한다.
 
 ### 빌드 문제 해결
 | 증상 | 원인 / 해결 |
 |---|---|
-| `Error: not a PE file` | macOS/Linux에서 빌드함 → 반드시 Windows에서 빌드 |
-| 실행 시 `node:sqlite` 관련 오류 | Node 버전이 낮음 → 22.5+ (권장 24)로 다시 빌드 |
+| `Unsupported build OS` | Linux 등에서 빌드 → Windows 또는 macOS에서 빌드 |
+| (win) 실행 시 `node:sqlite` 오류 | Node 버전이 낮음 → 22.5+ (권장 24)로 다시 빌드 |
+| (mac) `codesign`/`lipo` 없음 | Xcode CLT 미설치 → `xcode-select --install` |
+| (mac) "개발자를 확인할 수 없어 열 수 없음" | Gatekeeper. 실행파일 **우클릭 → 열기** 로 1회 허용(`start.command` 가 격리 속성 자동 해제 시도) |
 | `postject`/`esbuild` 없음 | `npm install` 을 `--production` 으로 함 → 그냥 `npm install` |
-| exe는 뜨는데 화면이 깨짐 | `public/`·`template/` 이 exe 옆에 없음 → `dist/` 통째로 복사 |
+| 실행은 되는데 화면이 깨짐 | `public/`·`template/` 이 실행파일 옆에 없음 → `dist/` 통째로 복사 |
 
-### 교회 PC에서 최초 설정
-1. `dist/` 폴더를 통째로 PC에 복사.
-2. `start.bat` 더블클릭 → 서버 실행.
-   - **최초 1회**: 콘솔 창에서 **입력용 암호**·**관리자 암호**를 물어본다(입력 글자는 화면에 안 보임). 입력하면 `config.json` 이 자동 생성된다. 개발 PC에서 만든 `config.json` 을 미리 복사해 두면 이 단계는 건너뛴다.
+### 대상 PC에서 최초 설정
+1. `dist/` 폴더를 통째로 대상 PC에 복사.
+2. **실행**: Windows는 `start.bat`, macOS는 `start.command` 더블클릭.
+   - macOS에서 **다운로드로 받았다면** 첫 실행 시 Gatekeeper 경고가 날 수 있다 → 실행파일 우클릭 → **열기** 1회(`start.command` 가 격리 속성 해제를 시도한다).
+   - **최초 1회**: 콘솔(터미널) 창에서 **입력용 암호**·**관리자 암호**를 물어본다(입력 글자는 안 보임). 입력하면 `config.json` 이 자동 생성된다. 미리 만든 `config.json` 을 넣어두면 이 단계는 건너뛴다.
    - 이후 실행부터는 바로 서버가 뜬다. `http://localhost:3000` 접속. **창을 닫으면 서버가 종료**된다.
 
 ### 폰에서 접속 (외부 터널 + QR 자동)
-[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 만 있으면 서버가 **자동으로 터널을 열고 접속용 QR을 만든다**. 설치(PATH 등록) 하거나 **`cloudflared.exe` 를 `church_check.exe` 옆에 두면** 된다.
+[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 만 있으면 서버가 **자동으로 터널을 열고 접속용 QR을 만든다**. 설치(PATH 등록) 하거나 **`cloudflared`(Windows는 `cloudflared.exe`) 를 실행파일 옆에 두면** 된다.
 
 - 서버를 켜면 콘솔 창에 접속 URL과 QR이 출력된다.
 - 관리자로 로그인 → **관리 → 폰 접속(QR)** 화면에서도 QR·URL을 볼 수 있다(폰으로 스캔·공유하기 편함).

@@ -1,9 +1,11 @@
-// Build a single Windows executable via Node SEA.
+// Build a single-file executable via Node SEA. Runs on the OS it is built on:
+// Windows (.exe, PE signature stripped) or macOS (Mach-O, ad-hoc re-signed).
+// SEA cannot cross-compile — build on Windows for Windows, on macOS for macOS.
 // Chromium is NOT bundled — the app uses the system Chrome/Edge at runtime.
-// Assets (public/, template/, config.json) ship alongside the exe, not inside it.
+// Assets (public/, template/, config.json) ship alongside the binary, not inside it.
 import esbuild from 'esbuild';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, writeFileSync, readFileSync, cpSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync, readFileSync, cpSync, chmodSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Remove the Authenticode signature from a copied node.exe so postject can find
@@ -28,6 +30,11 @@ function stripPeSignature(file) {
   buf.writeUInt32LE(0, secEntry + 4);
   writeFileSync(file, buf.subarray(0, certOff));
   console.log(`   stripped signature (${certSize} bytes)`);
+}
+
+const isWin = process.platform === 'win32';
+if (!isWin && process.platform !== 'darwin') {
+  throw new Error(`Unsupported build OS: ${process.platform}. Build on Windows or macOS.`);
 }
 
 const root = process.cwd();
@@ -56,34 +63,58 @@ writeFileSync(
 console.log('[3/5] generating SEA blob...');
 execFileSync(process.execPath, ['--experimental-sea-config', 'dist/sea-config.json'], { stdio: 'inherit' });
 
-console.log('[4/5] copying node runtime + stripping signature...');
-const exeOut = resolve(dist, 'church_check.exe');
-copyFileSync(process.execPath, exeOut);
-stripPeSignature(exeOut);
+console.log('[4/5] copying node runtime...');
+const exeOut = resolve(dist, isWin ? 'church_check.exe' : 'church_check');
+if (!isWin) {
+  // macOS node is usually a universal (fat) binary; postject needs a single-arch
+  // Mach-O or the fuse sentinel appears once per slice ("multiple occurrences").
+  // Thin to the host arch — the resulting binary runs on that arch only.
+  const macArch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+  const archs = execFileSync('lipo', ['-archs', process.execPath]).toString().trim().split(/\s+/);
+  if (archs.length > 1) {
+    execFileSync('lipo', [process.execPath, '-thin', macArch, '-output', exeOut]);
+    console.log(`   thinned universal binary to ${macArch}`);
+  } else {
+    copyFileSync(process.execPath, exeOut);
+  }
+} else {
+  copyFileSync(process.execPath, exeOut);
+}
 
-console.log('[5/5] injecting blob with postject...');
-// The fuse sentinel is build-specific — read it out of this node binary.
+// The fuse sentinel is build-specific — read it out of this node binary
+// (it survives both PE signature stripping and macOS codesign).
 const fuse = readFileSync(exeOut).toString('latin1').match(/NODE_SEA_FUSE_[0-9a-f]{32}/)?.[0];
 if (!fuse) throw new Error('SEA fuse sentinel not found in the node binary');
-execFileSync(
-  process.execPath,
-  [
-    resolve(root, 'node_modules/postject/dist/cli.js'),
-    exeOut,
-    'NODE_SEA_BLOB',
-    'dist/sea-prep.blob',
-    '--sentinel-fuse',
-    fuse,
-  ],
-  { stdio: 'inherit' },
-);
+const postjectArgs = [
+  resolve(root, 'node_modules/postject/dist/cli.js'),
+  exeOut,
+  'NODE_SEA_BLOB',
+  'dist/sea-prep.blob',
+  '--sentinel-fuse',
+  fuse,
+];
+
+console.log('[5/5] injecting blob with postject...');
+if (isWin) {
+  // Windows: strip the Authenticode signature so postject can inject, then inject.
+  stripPeSignature(exeOut);
+  execFileSync(process.execPath, postjectArgs, { stdio: 'inherit' });
+} else {
+  // macOS: remove signature → inject into a Mach-O segment → ad-hoc re-sign.
+  // An unsigned Mach-O will not launch on modern macOS.
+  execFileSync('codesign', ['--remove-signature', exeOut], { stdio: 'inherit' });
+  execFileSync(process.execPath, [...postjectArgs, '--macho-segment-name', 'NODE_SEA'], { stdio: 'inherit' });
+  chmodSync(exeOut, 0o755);
+  execFileSync('codesign', ['--sign', '-', exeOut], { stdio: 'inherit' });
+}
 
 console.log('[+] assembling distributable folder...');
 cpSync(resolve(root, 'public'), resolve(dist, 'public'), { recursive: true });
 cpSync(resolve(root, 'template'), resolve(dist, 'template'), { recursive: true });
 copyFileSync(resolve(root, 'config.example.json'), resolve(dist, 'config.example.json'));
 
-const startBat = `@echo off
+if (isWin) {
+  const startBat = `@echo off
 chcp 65001 >nul
 cd /d "%~dp0"
 echo church_check 서버를 시작합니다...
@@ -96,8 +127,29 @@ echo.
 echo 서버가 종료되었습니다.
 pause
 `;
-writeFileSync(resolve(dist, 'start.bat'), startBat);
+  writeFileSync(resolve(dist, 'start.bat'), startBat);
+} else {
+  const startCommand = `#!/bin/bash
+cd "$(dirname "$0")"
+# 다운로드로 받았을 때 붙는 Gatekeeper 격리 속성 해제(있으면)
+xattr -dr com.apple.quarantine "./church_check" 2>/dev/null
+echo "church_check 서버를 시작합니다..."
+echo "  - 최초 실행이면 입력용/관리자 암호를 물어봅니다."
+echo "  - cloudflared 가 있으면 외부 접속용 QR이 아래에 표시됩니다."
+echo "  - 종료하려면 이 창을 닫거나 Ctrl+C 를 누르세요."
+echo ""
+"./church_check"
+echo ""
+echo "서버가 종료되었습니다."
+read -n1 -rp "아무 키나 누르면 창이 닫힙니다..."
+`;
+  const startPath = resolve(dist, 'start.command');
+  writeFileSync(startPath, startCommand);
+  chmodSync(startPath, 0o755);
+}
 
+const binName = isWin ? 'church_check.exe' : 'church_check';
+const launcher = isWin ? 'start.bat' : 'start.command';
 console.log(`\nDone. Distributable folder: ${dist}`);
-console.log('  church_check.exe · start.bat · public/ · template/ · config.example.json');
-console.log('First run: copy config.example.json to config.json and set passwords.');
+console.log(`  ${binName} · ${launcher} · public/ · template/ · config.example.json`);
+console.log('First run: the app prompts for input/admin passwords and writes config.json.');
