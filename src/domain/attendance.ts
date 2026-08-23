@@ -12,8 +12,8 @@ export interface StatusDef {
 // Input dropdown order. Absence = no row (not selectable).
 export const STATUSES: StatusDef[] = [
   { value: 'before', label: '예배전', symbol: '●' },
-  { value: 'praise', label: '찬양중', symbol: '◉' },
-  { value: 'after', label: '찬양후', symbol: '○' },
+  { value: 'praise', label: '찬양후', symbol: '◉' },
+  { value: 'after', label: '찬양중', symbol: '○' },
   { value: 'main', label: '본당', symbol: '본' },
   { value: 'etc', label: '기타', symbol: '기타' },
 ];

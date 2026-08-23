@@ -84,6 +84,8 @@ a.count-pill { color: inherit; text-decoration: none; cursor: pointer; }
 a.count-pill:active { opacity: 0.85; }
 a.count-pill.active { background: var(--accent); color: #fff; }
 .date-form { margin-bottom: 8px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn-row button { width: auto; flex: 1 1 auto; margin-top: 0; }
 
 /* visitor promote form */
 .visitor-row { flex-direction: column; align-items: stretch; }

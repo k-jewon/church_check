@@ -81,6 +81,7 @@ export function page(opts: {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
         <title>${opts.title}</title>
+        <link rel="icon" href="data:image/svg+xml,${raw("%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ctext%20y='14'%20font-size='14'%3E%E2%9C%94%3C/text%3E%3C/svg%3E")}" />
         <link rel="stylesheet" href="/public/app.css" />
         <script src="/public/htmx.min.js" defer></script>
       </head>
