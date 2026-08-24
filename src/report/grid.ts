@@ -31,9 +31,9 @@ export interface VisitLog {
 
 export interface SummaryRow {
   date: string;
-  youth: number; // 청년 (새가족·방문 제외, etc 제외)
-  newEtc: number; // 새가족 + 기타(etc)
-  total: number;
+  youth: number; // 청년 (새가족 포함, 방문·etc 제외)
+  newBeliever: number; // 새신자 = 새가족 + 기타(etc)
+  total: number; // 청년 + 기타(etc) — 새가족은 청년에 포함되어 중복 집계하지 않음
 }
 
 export interface GridData {
@@ -63,7 +63,7 @@ function leaderKey(members: GridMember[]): { year: number; name: string } {
 // Build the printable grid model for a Sunday range (current-속 grouping).
 export function buildGrid(fromISO: string, toISO: string): GridData {
   const dates = sundaysInRange(fromISO, toISO);
-  const members = listMembers({ activeOnly: true }); // sorted: sok, role, name
+  const members = listMembers({ activeOnly: true }); // sorted: sok, role, birth_year, name
 
   const memberById = new Map<number, Member>();
   for (const m of members) memberById.set(m.id, m);
@@ -120,23 +120,24 @@ export function buildGrid(fromISO: string, toISO: string): GridData {
     names: (visitMap.get(d) ?? []).sort((a, b) => a.localeCompare(b, 'ko')),
   }));
 
-  // ---- 출석합계: 주차별 청년 / 새가족+기타 / 합계 ----
+  // ---- 출석합계: 주차별 청년 / 새신자 / 합계 ----
   const summary: SummaryRow[] = dates.map((d) => {
     let youth = 0;
-    let newEtc = 0;
+    let newFamily = 0;
+    let etc = 0;
     for (const r of rows) {
       if (r.service_date !== d) continue;
       const m = memberById.get(r.member_id);
       if (!m) continue;
       const k = kindOf(m.sok);
       if (r.status === 'etc') {
-        newEtc += 1; // 기타(방문 포함)
-      } else if (isAttended(r.status)) {
-        if (k === 'newfamily') newEtc += 1;
-        else if (k !== 'visitor') youth += 1; // 일반 속 + 군인
+        etc += 1; // 기타(방문 포함)
+      } else if (isAttended(r.status) && k !== 'visitor') {
+        youth += 1; // 일반 속 + 군인 + 새가족
+        if (k === 'newfamily') newFamily += 1;
       }
     }
-    return { date: d, youth, newEtc, total: youth + newEtc };
+    return { date: d, youth, newBeliever: newFamily + etc, total: youth + etc };
   });
 
   return { dates, soks, visits, summary, memberCount: members.length };

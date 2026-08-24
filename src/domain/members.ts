@@ -45,6 +45,7 @@ function sortMembers(rows: Member[]): Member[] {
     (a, b) =>
       a.sok.localeCompare(b.sok, 'ko') ||
       ROLE_RANK[a.role] - ROLE_RANK[b.role] ||
+      (a.birth_year ?? Infinity) - (b.birth_year ?? Infinity) ||
       a.name.localeCompare(b.name, 'ko'),
   );
 }

@@ -83,7 +83,7 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   // 출석합계 표
   const sumHead = grid.summary.map((s) => `<th>${esc(md(s.date))}</th>`).join('');
   const sumYouth = grid.summary.map((s) => `<td>${s.youth}</td>`).join('');
-  const sumNew = grid.summary.map((s) => `<td>${s.newEtc}</td>`).join('');
+  const sumNew = grid.summary.map((s) => `<td>${s.newBeliever}</td>`).join('');
   const sumTotal = grid.summary.map((s) => `<td>${s.total}</td>`).join('');
 
   return `<!doctype html>
@@ -132,7 +132,7 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
         <thead><tr><th class="rowlabel">출석합계</th>${sumHead}</tr></thead>
         <tbody>
           <tr><td class="rowlabel">청년</td>${sumYouth}</tr>
-          <tr><td class="rowlabel">새가족+기타</td>${sumNew}</tr>
+          <tr><td class="rowlabel">새신자</td>${sumNew}</tr>
           <tr class="total"><td class="rowlabel">합계</td>${sumTotal}</tr>
         </tbody>
       </table>
