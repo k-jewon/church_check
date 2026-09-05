@@ -6,8 +6,8 @@ import { formatBirthYear } from '../domain/members.js';
 // Compact single-glyph symbols for the dense grid.
 const SYMBOL: Record<Status, string> = {
   before: '●',
-  praise: '◉',
-  after: '○',
+  praise: '○',
+  after: '◉',
   main: '본',
   etc: '기',
 };
