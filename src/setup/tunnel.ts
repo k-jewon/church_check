@@ -67,5 +67,8 @@ function warnNoTunnel(): void {
   warned = true;
   console.log('\n[알림] cloudflared 가 없어 외부 접속(터널)을 건너뜁니다.');
   console.log('       같은 Wi-Fi의 폰이라면 http://<이 PC의 IP>:<포트> 로 접속하세요.');
-  console.log('       외부에서 접속하려면 cloudflared 를 설치한 뒤 다시 실행하세요.\n');
+  console.log('       외부 접속이 필요하면:');
+  console.log('       1) https://github.com/cloudflare/cloudflared/releases 에서 내려받아');
+  console.log(`       2) 파일 이름을 ${process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared'} 로 두고 이 프로그램과 같은 폴더에 넣은 뒤`);
+  console.log('       3) 프로그램을 다시 실행하세요.\n');
 }

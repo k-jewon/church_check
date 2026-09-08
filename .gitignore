@@ -4,3 +4,8 @@ data/
 config.json
 *.log
 .DS_Store
+cloudflared
+cloudflared.exe
+release/
+build/
+.cache/

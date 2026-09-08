@@ -231,7 +231,9 @@ adminRoutes.get('/tunnel', async (c) => {
     : html`
         <div class="card">
           <h1>폰 접속 (QR)</h1>
-          <p class="muted">아직 외부 접속 주소가 준비되지 않았습니다. cloudflared 가 설치돼 있으면 잠시 뒤 새로고침 하세요. 없으면 같은 Wi-Fi에서 이 PC의 IP로 접속하세요.</p>
+          <p class="muted">아직 외부 접속 주소가 준비되지 않았습니다. cloudflared 가 있으면 서버 시작 후 몇 초 안에 만들어지니 잠시 뒤 새로고침 하세요.</p>
+          <p class="muted">계속 안 나오면 cloudflared 가 없는 경우입니다. <a href="https://github.com/cloudflare/cloudflared/releases">cloudflared 내려받기</a> → 파일 이름을 <code>cloudflared.exe</code>(macOS는 <code>cloudflared</code>)로 두고 프로그램과 같은 폴더에 넣은 뒤 다시 실행하세요.</p>
+          <p class="muted">그 전까지는 같은 Wi-Fi에서 이 PC의 IP(<code>http://&lt;이 PC의 IP&gt;:3000</code>)로 접속할 수 있습니다.</p>
         </div>`;
   return c.html(page({ title: '폰 접속(QR)', section: 'admin', body }));
 });

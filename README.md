@@ -57,8 +57,8 @@ npm run dev          # http://localhost:3000
 
 | 대상 | 산출물 | 처리 |
 |---|---|---|
-| **Windows** | `church_check.exe` + `start.bat` | Authenticode 서명 제거 → blob 주입 |
-| **macOS** | `church_check` + `start.command` | 유니버설→호스트 arch로 thin → blob 주입 → ad-hoc 재서명 |
+| **Windows** | `church_check.exe` + `서버실행.bat` | Authenticode 서명 제거 → blob 주입 |
+| **macOS** | `church_check` + `서버실행.command` | 유니버설→호스트 arch로 thin → blob 주입 → ad-hoc 재서명 |
 
 ### 사전 준비 (1회)
 1. **Node.js 24.x 설치** — 빌드하려는 OS에서(개발·검증 버전, `node:sqlite` 무플래그 동작, 최소 22.5+). [nodejs.org](https://nodejs.org) → `node -v` 확인.
@@ -74,14 +74,16 @@ npm run dev          # http://localhost:3000
 ```
 npm run build:exe
 ```
-esbuild 번들 → SEA blob 생성 → 런타임 복사·서명 → blob 주입 순으로 진행된다. 완료되면 `dist/` 에 배포 세트가 생성된다:
+esbuild 번들 → SEA blob 생성 → 런타임 복사·서명 → blob 주입 → cloudflared 내려받기 순으로 진행된다. 완료되면 **`release/`** 에 배포 세트가 생성된다:
 ```
-dist/
-├── church_check(.exe)          # Node 런타임 내장 (Chromium 미포함, ~90–130MB)
-├── start.bat / start.command   # 더블클릭 실행 (OS별)
-├── public/  template/          # 정적 자산 (실행파일 옆에 있어야 함)
+release/
+├── church_check(.exe)              # Node 런타임 내장 (Chromium 미포함, ~90–130MB)
+├── 서버실행.bat / .command       # 더블클릭 실행 (OS별)
+├── cloudflared(.exe)               # 폰 접속(QR) 터널 — 자동 동봉
+├── public/  template/              # 정적 자산 (실행파일 옆에 있어야 함)
 └── config.example.json
 ```
+중간 산출물은 `build/` 에서 만들고 빌드 끝에 지운다. cloudflared 는 `.cache/` 에 보관돼 재빌드 시 다시 받지 않는다. `dist/` 는 `npm run build`(tsc) 전용이라 배포와 섞이지 않는다.
 
 **PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재, macOS는 Chrome 등 필요). 실행파일에 Chromium을 넣지 않아 용량을 줄였다. 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
 
@@ -93,29 +95,35 @@ dist/
 | `Unsupported build OS` | Linux 등에서 빌드 → Windows 또는 macOS에서 빌드 |
 | (win) 실행 시 `node:sqlite` 오류 | Node 버전이 낮음 → 22.5+ (권장 24)로 다시 빌드 |
 | (mac) `codesign`/`lipo` 없음 | Xcode CLT 미설치 → `xcode-select --install` |
-| (mac) "개발자를 확인할 수 없어 열 수 없음" | Gatekeeper. 실행파일 **우클릭 → 열기** 로 1회 허용(`start.command` 가 격리 속성 자동 해제 시도) |
+| (mac) "개발자를 확인할 수 없어 열 수 없음" | Gatekeeper. 실행파일 **우클릭 → 열기** 로 1회 허용(`서버실행.command` 가 격리 속성 자동 해제 시도) |
 | `postject`/`esbuild` 없음 | `npm install` 을 `--production` 으로 함 → 그냥 `npm install` |
-| 실행은 되는데 화면이 깨짐 | `public/`·`template/` 이 실행파일 옆에 없음 → `dist/` 통째로 복사 |
+| 실행은 되는데 화면이 깨짐 | `public/`·`template/` 이 실행파일 옆에 없음 → `release/` 통째로 복사 |
 
 ### 대상 PC에서 최초 설정
-1. `dist/` 폴더를 통째로 대상 PC에 복사.
-2. **실행**: Windows는 `start.bat`, macOS는 `start.command` 더블클릭.
-   - macOS에서 **다운로드로 받았다면** 첫 실행 시 Gatekeeper 경고가 날 수 있다 → 실행파일 우클릭 → **열기** 1회(`start.command` 가 격리 속성 해제를 시도한다).
+> **`release/` 안에서 직접 서버를 켜지 말 것.** 실행하면 그 폴더에 `config.json`(암호)과 `data/`(출석 DB)가 생기고, 그대로 넘기면 함께 유출된다. 빌드한 PC에서 운영도 하려면 `release/` 를 다른 이름의 폴더(예: `church_check_운영`)로 **복사한 뒤 거기서** 실행한다. 빌드 시 `release/` 에 그런 파일이 남아 있으면 경고가 출력된다.
+
+1. `release/` 폴더를 통째로 대상 PC에 복사.
+2. **실행**: `서버실행.bat`(Windows) / `서버실행.command`(macOS) 더블클릭.
+   - macOS에서 **다운로드로 받았다면** 첫 실행 시 Gatekeeper 경고가 날 수 있다 → 실행파일 우클릭 → **열기** 1회(`서버실행.command` 가 격리 속성 해제를 시도한다).
    - **최초 1회**: 콘솔(터미널) 창에서 **입력용 암호**·**관리자 암호**를 물어본다(입력 글자는 안 보임). 입력하면 `config.json` 이 자동 생성된다. 미리 만든 `config.json` 을 넣어두면 이 단계는 건너뛴다.
    - 이후 실행부터는 바로 서버가 뜬다. `http://localhost:3000` 접속. **창을 닫으면 서버가 종료**된다.
 
 ### 폰에서 접속 (외부 터널 + QR 자동)
-[cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) 만 있으면 서버가 **자동으로 터널을 열고 접속용 QR을 만든다**. 설치(PATH 등록) 하거나 **`cloudflared`(Windows는 `cloudflared.exe`) 를 실행파일 옆에 두면** 된다.
+`npm run build:exe` 가 **cloudflared 를 자동으로 내려받아 `release/` 에 넣는다**. 그대로 복사해 쓰면 별도 설치 없이 서버가 **터널을 열고 접속용 QR을 만든다**.
 
 - 서버를 켜면 콘솔 창에 접속 URL과 QR이 출력된다.
 - 관리자로 로그인 → **관리 → 폰 접속(QR)** 화면에서도 QR·URL을 볼 수 있다(폰으로 스캔·공유하기 편함).
+- 빌드 PC가 오프라인이면 다운로드가 실패하고 경고만 남는다. 이때는 [릴리스 페이지](https://github.com/cloudflare/cloudflared/releases)에서 받아 **`cloudflared`(Windows는 `cloudflared.exe`) 를 실행파일 옆에 두면** 된다(PATH 설치도 가능).
 - cloudflared 가 없으면 터널은 건너뛰고 로컬(같은 Wi-Fi에서 이 PC의 IP)로만 접속 가능하다.
 
 > **이 URL은 서버를 껐다 켤 때마다 바뀐다.** URL이 공개되므로 앱 로그인(암호)이 유일한 접근 통제다.
 
+### 업데이트 (새 버전 배포)
+새로 빌드한 뒤 **`church_check.exe`(또는 `church_check`) · `public/` · `template/`** 만 운영 폴더에 덮어쓴다. `config.json` 과 `data/` 는 그대로 두면 암호·출석 데이터가 유지된다. cloudflared 는 바뀌지 않으므로 교체할 필요 없다.
+
 ### 백업
 - 관리자 → **전체 백업 다운로드** 로 DB 스냅샷(`.db`)을 받는다.
-- 권장: `data/` 폴더(또는 dist 전체)를 OneDrive/Google Drive 동기화 폴더에 두면 자동 백업이 된다. 매주 PDF도 그 자체로 스냅샷 역할을 한다.
+- 권장: `data/` 폴더(또는 release 전체)를 OneDrive/Google Drive 동기화 폴더에 두면 자동 백업이 된다. 매주 PDF도 그 자체로 스냅샷 역할을 한다.
 
 ---
 
