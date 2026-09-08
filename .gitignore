@@ -9,3 +9,4 @@ cloudflared.exe
 release/
 build/
 .cache/
+church_check-*.zip

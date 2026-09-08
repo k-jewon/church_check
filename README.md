@@ -85,6 +85,24 @@ release/
 ```
 중간 산출물은 `build/` 에서 만들고 빌드 끝에 지운다. cloudflared 는 `.cache/` 에 보관돼 재빌드 시 다시 받지 않는다. `dist/` 는 `npm run build`(tsc) 전용이라 배포와 섞이지 않는다.
 
+같은 내용을 담은 **배포용 zip**(`church_check-<버전>-win.zip` / `-mac-arm64.zip`)도 프로젝트 루트에 함께 생성된다. 압축을 풀면 버전명 폴더 하나가 나온다(약 52MB → 해제 시 ~151MB).
+
+### 배포 (GitHub Releases)
+비개발자에게는 **저장소가 아니라 릴리스 zip**을 준다. `git clone` 으로는 실행파일을 받을 수 없다(`release/` 는 git 에 올리지 않는다 — exe 99MB 가 GitHub 파일당 100MB 제한에 걸리고, 빌드할 때마다 저장소가 불어난다).
+
+```
+npm run build:exe
+gh release create v0.1.0 church_check-0.1.0-win.zip --title "v0.1.0" --notes "..."
+# 이미 있는 릴리스에 추가(예: mac 빌드를 나중에 올릴 때)
+gh release upload v0.1.0 church_check-0.1.0-mac-arm64.zip
+```
+Windows·macOS 는 각 OS 에서 빌드해 **같은 릴리스에 zip 두 개**를 올린다. 버전은 `package.json` 의 `version` 을 따르므로, 새 버전을 낼 때 그 값을 먼저 올린다.
+
+받는 사람 안내:
+1. 릴리스 페이지에서 자기 OS 용 zip 다운로드.
+2. **압축을 반드시 푼다.** zip 안에서 바로 실행하면 임시 폴더에서 돌아가 `config.json`·`data/` 가 엉뚱한 곳에 생긴다.
+3. 풀린 폴더의 `서버실행.bat`(macOS 는 `서버실행.command`) 더블클릭.
+
 **PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재, macOS는 Chrome 등 필요). 실행파일에 Chromium을 넣지 않아 용량을 줄였다. 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
 
 > **macOS 실행파일은 빌드한 아키텍처 전용**이다. Apple Silicon(arm64)에서 빌드하면 arm64 맥에서만 실행된다. Intel 맥 대상이면 Intel 맥에서(또는 `arch -x86_64` 환경으로) 빌드한다.
@@ -102,7 +120,7 @@ release/
 ### 대상 PC에서 최초 설정
 > **`release/` 안에서 직접 서버를 켜지 말 것.** 실행하면 그 폴더에 `config.json`(암호)과 `data/`(출석 DB)가 생기고, 그대로 넘기면 함께 유출된다. 빌드한 PC에서 운영도 하려면 `release/` 를 다른 이름의 폴더(예: `church_check_운영`)로 **복사한 뒤 거기서** 실행한다. 빌드 시 `release/` 에 그런 파일이 남아 있으면 경고가 출력된다.
 
-1. `release/` 폴더를 통째로 대상 PC에 복사.
+1. `release/` 폴더를 통째로 대상 PC에 복사(또는 릴리스 zip 을 받아 압축 해제).
 2. **실행**: `서버실행.bat`(Windows) / `서버실행.command`(macOS) 더블클릭.
    - macOS에서 **다운로드로 받았다면** 첫 실행 시 Gatekeeper 경고가 날 수 있다 → 실행파일 우클릭 → **열기** 1회(`서버실행.command` 가 격리 속성 해제를 시도한다).
    - **최초 1회**: 콘솔(터미널) 창에서 **입력용 암호**·**관리자 암호**를 물어본다(입력 글자는 안 보임). 입력하면 `config.json` 이 자동 생성된다. 미리 만든 `config.json` 을 넣어두면 이 단계는 건너뛴다.

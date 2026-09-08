@@ -200,8 +200,41 @@ read -n1 -rp "아무 키나 누르면 창이 닫힙니다..."
   chmodSync(startPath, 0o755);
 }
 
+// If this release folder was ever used to run the server, it now holds real
+// passwords and attendance data. Never wrap that into a distributable zip.
+const leaks = ['config.json', 'data'].filter((f) => existsSync(resolve(out, f)));
+
+console.log('[+] packaging zip...');
+const zipPath = leaks.length ? null : packageZip();
+
 console.log('[+] cleaning intermediates...');
 rmSync(work, { recursive: true, force: true });
+
+// Zip the release folder for GitHub Releases. Staged under a versioned folder
+// name so extracting anywhere yields one tidy folder instead of loose files.
+// Uses the OS archiver (PowerShell on Windows, zip on macOS) — no dependency.
+function packageZip() {
+  const { version } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+  const target = isWin ? 'win' : `mac-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
+  const pkgName = `church_check-${version}-${target}`;
+  const stage = resolve(work, pkgName);
+  const zip = resolve(root, `${pkgName}.zip`);
+  cpSync(out, stage, { recursive: true });
+  rmSync(zip, { force: true });
+  if (isWin) {
+    execFileSync('powershell', [
+      '-NoProfile',
+      '-Command',
+      `Compress-Archive -Path '${stage}' -DestinationPath '${zip}'`,
+    ]);
+  } else {
+    // -y keeps symlinks as symlinks; run from work/ so the archive root is pkgName.
+    execFileSync('zip', ['-rqy', zip, pkgName], { cwd: work });
+  }
+  const mb = (readFileSync(zip).length / 1048576).toFixed(1);
+  console.log(`   ${pkgName}.zip (${mb} MB)`);
+  return zip;
+}
 
 const binName = isWin ? 'church_check.exe' : 'church_check';
 const cfName = isWin ? 'cloudflared.exe' : 'cloudflared';
@@ -209,12 +242,11 @@ const cfPart = existsSync(resolve(out, cfName)) ? ` · ${cfName}` : '';
 console.log(`\nDone. Release folder: ${out}`);
 console.log(`  ${binName} · ${launcher} · public/ · template/ · config.example.json${cfPart}`);
 console.log(`Hand this folder over as-is; the user runs ${launcher}.`);
+if (zipPath) console.log(`Or upload the zip: gh release create v${JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).version} "${zipPath}"`);
 console.log('First run: the app prompts for input/admin passwords and writes config.json.');
 
-// If this release folder was ever used to run the server, it now holds real
-// passwords and attendance data. Warn loudly — copying it would leak both.
-const leaks = ['config.json', 'data'].filter((f) => existsSync(resolve(out, f)));
 if (leaks.length) {
   console.warn(`\n[경고] release 폴더에 ${leaks.join(' / ')} 가 있습니다 (이 폴더에서 서버를 실행한 적이 있음).`);
   console.warn('       암호·출석 데이터가 들어 있으니 그대로 배포하지 마세요. 지우고 다시 빌드하세요.');
+  console.warn('       (배포용 zip 은 만들지 않았습니다.)');
 }
