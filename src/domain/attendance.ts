@@ -66,6 +66,11 @@ export function mark(memberId: number, date: string, status: Status): void {
   ).run(memberId, date, status);
 }
 
+export function countAttendance(): number {
+  const row = db.prepare('SELECT COUNT(*) AS n FROM attendance').get() as { n: number };
+  return row.n;
+}
+
 export function unmark(memberId: number, date: string): void {
   db.prepare('DELETE FROM attendance WHERE member_id = ? AND service_date = ?').run(memberId, date);
 }
