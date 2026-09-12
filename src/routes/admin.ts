@@ -23,6 +23,7 @@ import { buildGrid } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
 import { renderPdf } from '../report/pdf.js';
 import { currentSunday, recentSundays } from '../domain/sundays.js';
+import { countAttendance } from '../domain/attendance.js';
 import { getTunnelUrl } from '../setup/tunnel.js';
 import QRCode from 'qrcode';
 
@@ -135,6 +136,7 @@ adminRoutes.get('/template', (c) => {
 // ---- Upload (initial only) + reset ----
 adminRoutes.get('/upload', (c) => {
   const total = countMembers();
+  const marks = countAttendance();
   const body =
     total > 0
       ? html`
@@ -142,7 +144,8 @@ adminRoutes.get('/upload', (c) => {
             <h1>명단 업로드</h1>
             <p class="error">이미 ${total}명이 등록되어 있어 업로드가 차단됩니다.</p>
             <p>소규모 변경은 <a href="/admin/members">명단 관리</a>에서 하세요. 전체를 다시 올리려면 아래에서 초기화해야 합니다.</p>
-            <form method="post" action="/admin/reset" onsubmit="return confirm('정말 전체 명단을 삭제합니까? 되돌릴 수 없습니다.');">
+            <p class="error">초기화는 명단 ${total}명뿐 아니라 <strong>출석 기록 ${marks}건까지 함께 지웁니다.</strong> 되돌릴 수 없으니 먼저 <a href="/admin/backup">백업</a>을 받으세요.</p>
+            <form method="post" action="/admin/reset" onsubmit="return confirm('명단 ${total}명과 출석 기록 ${marks}건을 모두 삭제합니다. 되돌릴 수 없습니다. 계속합니까?');">
               <label>확인 문구에 <code>DELETE</code> 를 입력<input name="confirm" placeholder="DELETE" /></label>
               <button type="submit" class="danger">전체 초기화</button>
             </form>
