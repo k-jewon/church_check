@@ -31,12 +31,25 @@ export async function renderPdf(html: string): Promise<Uint8Array> {
         return document.body.scrollHeight;
       }, px);
 
-    const baseHeight = await setFont(BASE_FONT_PX);
+    // Gaps, borders and paddings are fixed px, so they don't shrink with the
+    // font: a single proportional solve is always optimistic and overflows.
+    // Binary-search the largest font that actually fits instead.
     let fontPx = BASE_FONT_PX;
-    if (baseHeight > PRINTABLE_H_PX) {
-      fontPx = Math.max(MIN_FONT_PX, BASE_FONT_PX * (PRINTABLE_H_PX / baseHeight));
+    let finalHeight = await setFont(BASE_FONT_PX);
+    if (finalHeight > PRINTABLE_H_PX) {
+      fontPx = MIN_FONT_PX;
+      finalHeight = await setFont(MIN_FONT_PX);
+      if (finalHeight <= PRINTABLE_H_PX) {
+        let hi = BASE_FONT_PX;
+        for (let i = 0; i < 6; i++) {
+          const mid = (fontPx + hi) / 2;
+          const h = await setFont(mid);
+          if (h <= PRINTABLE_H_PX) fontPx = mid;
+          else hi = mid;
+        }
+        finalHeight = await setFont(fontPx);
+      }
     }
-    const finalHeight = await setFont(fontPx);
     const multipage = finalHeight > PRINTABLE_H_PX + 2;
 
     return await page.pdf({
