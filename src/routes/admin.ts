@@ -14,6 +14,7 @@ import {
   listMembers,
   normalizeBirthYear,
   ROLES,
+  type NewMember,
   setActive,
   updateMember,
   type Member,
@@ -63,7 +64,7 @@ adminRoutes.get('/members', (c) => {
               ${rows.map(
                 (m) => html`
                   <li class="${m.active ? '' : 'inactive'}">
-                    <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.role}${m.active ? raw('') : html` · <em>비활성</em>`}</span>
+                    <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.role ?? m.stage}${m.active ? raw('') : html` · <em>비활성</em>`}</span>
                     <span class="row-actions">
                       <a href="/admin/members/${m.id}/edit">수정</a>
                       <form method="post" action="/admin/members/${m.id}/active" class="inline">
@@ -293,9 +294,10 @@ adminRoutes.get('/report/pdf', async (c) => {
 function groupBySok(members: Member[]): [string, Member[]][] {
   const map = new Map<string, Member[]>();
   for (const m of members) {
-    const arr = map.get(m.sok) ?? [];
+    const key = m.sok ?? m.stage; // 새가족은 속이 없다
+    const arr = map.get(key) ?? [];
     arr.push(m);
-    map.set(m.sok, arr);
+    map.set(key, arr);
   }
   return [...map.entries()]; // listMembers already sorted by sok, role, name
 }
@@ -305,7 +307,7 @@ function memberForm(opts: { action: string; member?: Member }) {
   return html`
     <form method="post" action="${opts.action}">
       <label>이름<input name="name" value="${m?.name ?? ''}" required /></label>
-      <label>출생연도 (2자리 또는 4자리 · 방문자는 생략 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
+      <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
       <label>속<input name="sok" value="${m?.sok ?? ''}" required /></label>
       <label>직분
         <select name="role">
@@ -316,7 +318,8 @@ function memberForm(opts: { action: string; member?: Member }) {
     </form>`;
 }
 
-type ParsedForm = { value: { name: string; birth_year: number | null; sok: string; role: Member['role'] } } | { error: string };
+// 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 없으므로 여기서 만들지 않는다.
+type ParsedForm = { value: NewMember } | { error: string };
 function parseMemberForm(body: Record<string, unknown>): ParsedForm {
   const name = String(body.name ?? '').trim();
   const sok = String(body.sok ?? '').trim();
@@ -327,7 +330,7 @@ function parseMemberForm(body: Record<string, unknown>): ParsedForm {
   if (birthRaw !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
   if (!sok) return { error: '속을 입력하세요.' };
   if (!isRole(role)) return { error: '직분이 올바르지 않습니다.' };
-  return { value: { name, birth_year: birth, sok, role } };
+  return { value: { name, birth_year: birth, stage: '성도', sok, role } };
 }
 
 function errorPage(message: string, back: string) {
