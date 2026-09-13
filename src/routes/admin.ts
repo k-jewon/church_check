@@ -14,7 +14,8 @@ import {
   listMembers,
   listSoks,
   normalizeBirthYear,
-  sokNameFromLeader,
+  buildSokStates,
+  resolveAssignment,
   FIXED_SOKS,
   ROLES,
   type NewMember,
@@ -104,7 +105,7 @@ adminRoutes.get('/members', (c) => {
 });
 
 adminRoutes.post('/members', async (c) => {
-  const parsed = parseMemberForm(await c.req.parseBody(), sokOptions());
+  const parsed = parseMemberForm(await c.req.parseBody(), { members: listMembers() });
   if ('error' in parsed) return c.html(errorPage(parsed.error, '/admin/members'), 400);
   createMember(parsed.value);
   return c.redirect('/admin/members');
@@ -128,7 +129,10 @@ adminRoutes.post('/members/:id', async (c) => {
   const existing = getMember(id);
   if (!existing) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
   if (existing.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
-  const parsed = parseMemberForm(await c.req.parseBody(), sokOptions());
+  const parsed = parseMemberForm(await c.req.parseBody(), {
+    members: listMembers(),
+    member: existing,
+  });
   if ('error' in parsed) return c.html(errorPage(parsed.error, `/admin/members/${id}/edit`), 400);
   updateMember(id, parsed.value);
   return c.redirect('/admin/members');
@@ -352,7 +356,10 @@ function sokOptions(): string[] {
 
 // 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 없으므로 여기서 만들지 않는다.
 type ParsedForm = { value: NewMember } | { error: string };
-function parseMemberForm(body: Record<string, unknown>, existingSoks: string[]): ParsedForm {
+function parseMemberForm(
+  body: Record<string, unknown>,
+  opts: { members: Member[]; member?: Member },
+): ParsedForm {
   const name = String(body.name ?? '').trim();
   const sok = String(body.sok ?? '').trim();
   const role = String(body.role ?? '').trim();
@@ -361,16 +368,18 @@ function parseMemberForm(body: Record<string, unknown>, existingSoks: string[]):
   if (!name) return { error: '이름을 입력하세요.' };
   if (birthRaw !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
   if (!isRole(role)) return { error: '직분이 올바르지 않습니다.' };
-  if (sok) return { value: { name, birth_year: birth, stage: '성도', sok, role } };
 
-  // 속을 고르지 않았다. 속장이면 그 사람에게서 새 속이 생기고, 아니면 고를 수밖에 없다.
-  if (role !== '속장') return { error: '속을 고르세요. 새 속은 속장을 넣을 때만 생깁니다.' };
-  const derived = sokNameFromLeader(name);
-  if (!derived) return { error: '속장 이름이 두 글자 이상이어야 속 이름을 만들 수 있습니다.' };
-  if (existingSoks.includes(derived)) {
-    return { error: `이미 ${derived}이 있습니다. 그 속의 속장을 맡기려면 목록에서 ${derived}을 고르세요.` };
-  }
-  return { value: { name, birth_year: birth, stage: '성도', sok: derived, role } };
+  // 속 배정은 도메인 규칙이다. 화면은 판정을 그대로 쓴다.
+  const assigned = resolveAssignment({
+    id: opts.member?.id,
+    name,
+    role,
+    sok: sok || null,
+    current: opts.member?.sok ? { sok: opts.member.sok, role: opts.member.role! } : undefined,
+    soks: buildSokStates(opts.members),
+  });
+  if (!assigned.ok) return { error: assigned.error };
+  return { value: { name, birth_year: birth, stage: '성도', sok: assigned.sok, role } };
 }
 
 function errorPage(message: string, back: string) {
