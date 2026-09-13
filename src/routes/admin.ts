@@ -12,6 +12,7 @@ import {
   insertMany,
   isRole,
   listMembers,
+  listSoks,
   normalizeBirthYear,
   ROLES,
   type NewMember,
@@ -20,7 +21,7 @@ import {
   type Member,
 } from '../domain/members.js';
 import { parseRoster } from '../import/excel.js';
-import { buildGrid } from '../report/grid.js';
+import { buildGrid, SOLDIER } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
 import { renderPdf } from '../report/pdf.js';
 import { currentSunday, recentSundays } from '../domain/sundays.js';
@@ -95,7 +96,7 @@ adminRoutes.get('/members', (c) => {
     </div>
     <div class="card">
       <h2>성도 추가</h2>
-      ${memberForm({ action: '/admin/members' })}
+      ${memberForm({ action: '/admin/members', soks: sokOptions() })}
     </div>`;
   return c.html(page({ title: '명단 관리', section: 'admin', body }));
 });
@@ -115,7 +116,7 @@ adminRoutes.get('/members/:id/edit', (c) => {
   const body = html`
     <div class="card">
       <h1>성도 수정</h1>
-      ${memberForm({ action: `/admin/members/${m.id}`, member: m })}
+      ${memberForm({ action: `/admin/members/${m.id}`, member: m, soks: sokOptions() })}
     </div>`;
   return c.html(page({ title: '성도 수정', section: 'admin', body }));
 });
@@ -314,20 +315,36 @@ function groupBySok(members: Member[]): [string, Member[]][] {
   return [...map.entries()]; // listMembers already sorted by sok, role, name
 }
 
-function memberForm(opts: { action: string; member?: Member }) {
+// 속은 반드시 속장을 갖는다(군인속만 예외). 그래서 **속이 생기는 길은 속장이 생기는
+// 길뿐**이고, 폼도 그렇게 생겼다 — 평소에는 목록에서 고르기만 하고, 새 속은 직분이
+// 속장일 때만 만들어진다. 자유 입력이면 오타 한 건이 그 사람을 별도 속으로 그린다.
+function memberForm(opts: { action: string; member?: Member; soks: string[] }) {
   const m = opts.member;
   return html`
     <form method="post" action="${opts.action}">
       <label>이름<input name="name" value="${m?.name ?? ''}" required /></label>
       <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
-      <label>속<input name="sok" value="${m?.sok ?? ''}" required /></label>
       <label>직분
         <select name="role">
           ${ROLES.map((r) => html`<option value="${r}" ${m?.role === r ? raw('selected') : raw('')}>${r}</option>`)}
         </select>
       </label>
+      <label>속
+        <select name="sok">
+          <option value="">— 선택 —</option>
+          ${opts.soks.map((s) => html`<option value="${s}" ${m?.sok === s ? raw('selected') : raw('')}>${s}</option>`)}
+        </select>
+      </label>
+      <label>새 속 만들기 (직분이 <strong>속장</strong>일 때만)
+        <input name="new_sok" placeholder="예: 갑자속 — 비워 두면 위에서 고른 속" />
+      </label>
       <button type="submit">저장</button>
     </form>`;
+}
+
+// 군인속은 속장이 없어 위 규칙으로는 만들어질 수 없으므로 목록에 항상 둔다.
+function sokOptions(): string[] {
+  return [...new Set([...listSoks(), SOLDIER])].sort((a, b) => a.localeCompare(b, 'ko'));
 }
 
 // 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 없으므로 여기서 만들지 않는다.
@@ -335,14 +352,19 @@ type ParsedForm = { value: NewMember } | { error: string };
 function parseMemberForm(body: Record<string, unknown>): ParsedForm {
   const name = String(body.name ?? '').trim();
   const sok = String(body.sok ?? '').trim();
+  const newSok = String(body.new_sok ?? '').trim();
   const role = String(body.role ?? '').trim();
   const birthRaw = String(body.birth_year ?? '').trim();
   const birth = birthRaw === '' ? null : normalizeBirthYear(birthRaw);
   if (!name) return { error: '이름을 입력하세요.' };
   if (birthRaw !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
-  if (!sok) return { error: '속을 입력하세요.' };
   if (!isRole(role)) return { error: '직분이 올바르지 않습니다.' };
-  return { value: { name, birth_year: birth, stage: '성도', sok, role } };
+  if (newSok && role !== '속장') {
+    return { error: '새 속은 속장만 만들 수 있습니다. 직분을 속장으로 하거나, 이미 있는 속에서 고르세요.' };
+  }
+  const chosen = newSok || sok;
+  if (!chosen) return { error: '속을 고르거나, 속장이라면 새 속 이름을 넣으세요.' };
+  return { value: { name, birth_year: birth, stage: '성도', sok: chosen, role } };
 }
 
 function errorPage(message: string, back: string) {

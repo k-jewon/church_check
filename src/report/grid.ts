@@ -59,7 +59,10 @@ function sectionOf(m: Member): string {
   return m.sok ?? m.stage;
 }
 
-// 대표자(속장 우선, 없으면 부속장·속원 순 최상위)의 생년/이름. 정렬 키로 쓴다.
+// 속의 대표자(생년/이름). 일반 속 배치의 정렬 키다.
+// **속은 반드시 속장을 갖는다**(소유자 확정 2026-09-13). 유일한 예외가 군인속인데
+// 그 속은 kind 로 이미 맨 뒤에 놓이므로 이 키가 자리를 정하지 않는다.
+// 따라서 아래 폴백은 정상 경로가 아니라 데이터가 깨졌을 때의 방어다.
 function leaderKey(members: GridMember[]): { year: number; name: string } {
   // members는 이미 role, name 순으로 정렬되어 있어 [0]이 최상위 직분.
   const leader = members[0];
