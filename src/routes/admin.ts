@@ -30,6 +30,13 @@ import QRCode from 'qrcode';
 
 const REPORT_TITLE = '청년부';
 
+// 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 비어 있는데 아래 폼이 둘 다
+// 요구하므로, 저장하는 순간 신분이 성도로 바뀌고 직분은 드롭다운의 첫 값(속장)이
+// 된다. 승격은 결정이지 수정 화면의 부수 효과가 아니므로 막아 둔다.
+// 새가족 등록·승격 화면이 생기면 이 빗장은 그 화면이 걷어낸다.
+const NEWFAMILY_LOCKED =
+  '새가족은 이 화면에서 수정할 수 없습니다. 속·직분을 넣어 저장하면 정식 성도가 되어 버립니다.';
+
 export const adminRoutes = new Hono();
 
 // ---- Dashboard ----
@@ -66,7 +73,9 @@ adminRoutes.get('/members', (c) => {
                   <li class="${m.active ? '' : 'inactive'}">
                     <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.role ?? m.stage}${m.active ? raw('') : html` · <em>비활성</em>`}</span>
                     <span class="row-actions">
-                      <a href="/admin/members/${m.id}/edit">수정</a>
+                      ${m.stage === '성도'
+                        ? html`<a href="/admin/members/${m.id}/edit">수정</a>`
+                        : raw('')}
                       <form method="post" action="/admin/members/${m.id}/active" class="inline">
                         <input type="hidden" name="active" value="${m.active ? '0' : '1'}" />
                         <button class="linklike" type="submit">${m.active ? '비활성' : '활성'}</button>
@@ -102,6 +111,7 @@ adminRoutes.get('/members/:id/edit', (c) => {
   const id = Number(c.req.param('id'));
   const m = getMember(id);
   if (!m) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
+  if (m.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
   const body = html`
     <div class="card">
       <h1>성도 수정</h1>
@@ -112,7 +122,9 @@ adminRoutes.get('/members/:id/edit', (c) => {
 
 adminRoutes.post('/members/:id', async (c) => {
   const id = Number(c.req.param('id'));
-  if (!getMember(id)) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
+  const existing = getMember(id);
+  if (!existing) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
+  if (existing.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
   const parsed = parseMemberForm(await c.req.parseBody());
   if ('error' in parsed) return c.html(errorPage(parsed.error, `/admin/members/${id}/edit`), 400);
   updateMember(id, parsed.value);
