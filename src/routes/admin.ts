@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { readFileSync, unlinkSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { db, DB_PATH } from '../db/index.js';
+import { getDb, DB_PATH } from '../db/index.js';
 import { html, page, raw } from '../views/layout.js';
 import {
   countMembers,
@@ -219,7 +219,7 @@ adminRoutes.post('/reset', async (c) => {
 // ---- backup (full DB snapshot) ----
 adminRoutes.get('/backup', (c) => {
   const tmp = resolve(dirname(DB_PATH), 'backup-tmp.db');
-  db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
+  getDb().exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
   try {
     const file = readFileSync(tmp);
     const stamp = new Date().toISOString().slice(0, 10);

@@ -1,4 +1,4 @@
-import { db } from '../db/index.js';
+import { getDb } from '../db/index.js';
 
 export type Role = '속장' | '부속장' | '속원';
 export const ROLES: Role[] = ['속장', '부속장', '속원'];
@@ -81,57 +81,57 @@ function sortMembers(rows: Member[]): Member[] {
 }
 
 export function countMembers(): number {
-  return (db.prepare('SELECT COUNT(*) AS n FROM member').get() as { n: number }).n;
+  return (getDb().prepare('SELECT COUNT(*) AS n FROM member').get() as { n: number }).n;
 }
 
 export function listMembers(opts?: { activeOnly?: boolean }): Member[] {
   const sql = opts?.activeOnly ? 'SELECT * FROM member WHERE active = 1' : 'SELECT * FROM member';
-  return sortMembers(db.prepare(sql).all() as unknown as Member[]);
+  return sortMembers(getDb().prepare(sql).all() as unknown as Member[]);
 }
 
 export function getMember(id: number): Member | undefined {
-  return db.prepare('SELECT * FROM member WHERE id = ?').get(id) as unknown as Member | undefined;
+  return getDb().prepare('SELECT * FROM member WHERE id = ?').get(id) as unknown as Member | undefined;
 }
 
 export function createMember(m: NewMember): number {
-  const info = db
+  const info = getDb()
     .prepare('INSERT INTO member (name, birth_year, stage, sok, role) VALUES (?, ?, ?, ?, ?)')
     .run(m.name, m.birth_year, m.stage, m.sok, m.role);
   return Number(info.lastInsertRowid);
 }
 
 export function updateMember(id: number, m: NewMember): void {
-  db.prepare(
+  getDb().prepare(
     'UPDATE member SET name = ?, birth_year = ?, stage = ?, sok = ?, role = ? WHERE id = ?',
   ).run(m.name, m.birth_year, m.stage, m.sok, m.role, id);
 }
 
 export function setActive(id: number, active: boolean): void {
-  db.prepare('UPDATE member SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
+  getDb().prepare('UPDATE member SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
 }
 
 export function insertMany(members: NewMember[]): number {
-  db.exec('BEGIN');
+  getDb().exec('BEGIN');
   try {
-    const stmt = db.prepare(
+    const stmt = getDb().prepare(
       'INSERT INTO member (name, birth_year, stage, sok, role) VALUES (?, ?, ?, ?, ?)',
     );
     for (const m of members) stmt.run(m.name, m.birth_year, m.stage, m.sok, m.role);
-    db.exec('COMMIT');
+    getDb().exec('COMMIT');
     return members.length;
   } catch (err) {
-    db.exec('ROLLBACK');
+    getDb().exec('ROLLBACK');
     throw err;
   }
 }
 
 // Wipe the whole roster (explicit admin reset before re-upload).
 export function deleteAllMembers(): void {
-  db.exec('DELETE FROM member');
+  getDb().exec('DELETE FROM member');
 }
 
 export function listSoks(): string[] {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT DISTINCT sok FROM member WHERE sok IS NOT NULL')
     .all() as { sok: string }[];
   return rows.map((r) => r.sok).sort((a, b) => a.localeCompare(b, 'ko'));

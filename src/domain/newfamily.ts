@@ -1,4 +1,4 @@
-import { db } from '../db/index.js';
+import { getDb } from '../db/index.js';
 import { createMember } from './members.js';
 
 // 새가족 등록정보와 회차. 둘 다 member(stage='새가족')에 매달린다.
@@ -31,13 +31,13 @@ export interface NewProfile {
 }
 
 export function getProfile(memberId: number): Profile | undefined {
-  return db.prepare('SELECT * FROM newfamily_profile WHERE member_id = ?').get(memberId) as
+  return getDb().prepare('SELECT * FROM newfamily_profile WHERE member_id = ?').get(memberId) as
     | unknown as Profile
     | undefined;
 }
 
 export function saveProfile(memberId: number, p: NewProfile): void {
-  db.prepare(
+  getDb().prepare(
     `INSERT INTO newfamily_profile (member_id, phone, gender, inviter, route, route_note)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (member_id) DO UPDATE SET
@@ -58,14 +58,14 @@ export function registerNewFamily(
   member: { name: string; birth_year: number | null },
   profile: NewProfile,
 ): number {
-  db.exec('BEGIN');
+  getDb().exec('BEGIN');
   try {
     const memberId = createMember({ ...member, stage: '새가족', sok: null, role: null });
     saveProfile(memberId, profile);
-    db.exec('COMMIT');
+    getDb().exec('COMMIT');
     return memberId;
   } catch (err) {
-    db.exec('ROLLBACK');
+    getDb().exec('ROLLBACK');
     throw err;
   }
 }
@@ -75,7 +75,7 @@ export function registerNewFamily(
 // 출석 행에서 유도할 수 없다.
 
 export function listSessions(memberId: number): string[] {
-  const rows = db
+  const rows = getDb()
     .prepare(
       'SELECT meeting_date FROM newfamily_session WHERE member_id = ? ORDER BY meeting_date',
     )
@@ -85,21 +85,21 @@ export function listSessions(memberId: number): string[] {
 
 export function countSessions(memberId: number): number {
   return (
-    db
+    getDb()
       .prepare('SELECT COUNT(*) AS n FROM newfamily_session WHERE member_id = ?')
       .get(memberId) as { n: number }
   ).n;
 }
 
 export function addSession(memberId: number, meetingDate: string): void {
-  db.prepare(
+  getDb().prepare(
     `INSERT INTO newfamily_session (member_id, meeting_date) VALUES (?, ?)
      ON CONFLICT (member_id, meeting_date) DO NOTHING`,
   ).run(memberId, meetingDate);
 }
 
 export function removeSession(memberId: number, meetingDate: string): void {
-  db.prepare('DELETE FROM newfamily_session WHERE member_id = ? AND meeting_date = ?').run(
+  getDb().prepare('DELETE FROM newfamily_session WHERE member_id = ? AND meeting_date = ?').run(
     memberId,
     meetingDate,
   );

@@ -1,6 +1,6 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
-import './db/index.js'; // initialise DB + schema on boot
+import { getDb } from './db/index.js';
 import { endSession, requireRole, roleForPassword, startSession } from './auth/middleware.js';
 import { html, page, raw } from './views/layout.js';
 import { adminRoutes } from './routes/admin.js';
@@ -9,6 +9,10 @@ import { inputRoutes } from './routes/input.js';
 // Build the Hono app. Kept separate from server.ts so that first-run config
 // setup (bootstrap) can run before any module that imports config.js loads.
 export function createApp(): Hono {
+  // Open the DB (and run migrations) at boot, so a migration failure surfaces
+  // here rather than on the first request. The module itself opens nothing.
+  getDb();
+
   const app = new Hono();
 
   app.use('/public/*', serveStatic({ root: './' }));

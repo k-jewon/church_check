@@ -1,4 +1,4 @@
-import { db } from '../db/index.js';
+import { getDb } from '../db/index.js';
 import { roleRank, type Member } from './members.js';
 
 export type Status = 'before' | 'praise' | 'after' | 'main' | 'etc';
@@ -60,7 +60,7 @@ export function hasConsecutiveAbsence(seqChrono: (Status | null)[], n = 3): bool
 // 당시 신분과 당시 속을 함께 박는다. 나중에 속이 바뀌어도 과거 지면이 소급해 다시 그려지지 않는다.
 // 이미 있는 행을 고칠 때 스냅샷은 건드리지 않는다 — 그 행이 말하는 것은 지금이 아니라 그날이다.
 export function mark(memberId: number, date: string, status: Status): void {
-  db.prepare(
+  getDb().prepare(
     `INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at)
      SELECT ?, ?, ?, m.stage, m.sok FROM member m WHERE m.id = ?
      ON CONFLICT (member_id, service_date)
@@ -69,16 +69,16 @@ export function mark(memberId: number, date: string, status: Status): void {
 }
 
 export function countAttendance(): number {
-  const row = db.prepare('SELECT COUNT(*) AS n FROM attendance').get() as { n: number };
+  const row = getDb().prepare('SELECT COUNT(*) AS n FROM attendance').get() as { n: number };
   return row.n;
 }
 
 export function unmark(memberId: number, date: string): void {
-  db.prepare('DELETE FROM attendance WHERE member_id = ? AND service_date = ?').run(memberId, date);
+  getDb().prepare('DELETE FROM attendance WHERE member_id = ? AND service_date = ?').run(memberId, date);
 }
 
 export function getStatus(memberId: number, date: string): Status | null {
-  const row = db
+  const row = getDb()
     .prepare('SELECT status FROM attendance WHERE member_id = ? AND service_date = ?')
     .get(memberId, date) as { status: Status } | undefined;
   return row ? row.status : null;
@@ -90,7 +90,7 @@ export interface MarkedMember extends Member {
 
 // Members already marked on a date (any status), sorted by sok/role/name.
 export function marksForDate(date: string): MarkedMember[] {
-  const rows = db
+  const rows = getDb()
     .prepare(
       `SELECT m.*, a.status AS status
        FROM attendance a JOIN member m ON m.id = a.member_id
@@ -103,7 +103,7 @@ export function marksForDate(date: string): MarkedMember[] {
 // Active members with NO mark on the date, matching a name query. Limited for the dropdown.
 export function searchUnmarked(date: string, query: string, limit = 20): Member[] {
   const q = `%${query.trim()}%`;
-  const rows = db
+  const rows = getDb()
     .prepare(
       `SELECT m.* FROM member m
        WHERE m.active = 1
@@ -117,7 +117,7 @@ export function searchUnmarked(date: string, query: string, limit = 20): Member[
 
 // Active members with NO mark on the date (full list, sorted). For the 미출석 view.
 export function listUnmarked(date: string): Member[] {
-  const rows = db
+  const rows = getDb()
     .prepare(
       `SELECT m.* FROM member m
        WHERE m.active = 1
@@ -129,7 +129,7 @@ export function listUnmarked(date: string): Member[] {
 
 export function unmarkedCount(date: string): number {
   return (
-    db
+    getDb()
       .prepare(
         `SELECT COUNT(*) AS n FROM member m
          WHERE m.active = 1
@@ -140,7 +140,7 @@ export function unmarkedCount(date: string): number {
 }
 
 export function statusCounts(date: string): Record<Status, number> {
-  const rows = db
+  const rows = getDb()
     .prepare('SELECT status, COUNT(*) AS n FROM attendance WHERE service_date = ? GROUP BY status')
     .all(date) as { status: Status; n: number }[];
   const out: Record<Status, number> = { before: 0, praise: 0, after: 0, main: 0, etc: 0 };
@@ -156,7 +156,7 @@ export interface RangeRow {
 export function attendanceInRange(dates: string[]): RangeRow[] {
   if (!dates.length) return [];
   const placeholders = dates.map(() => '?').join(',');
-  return db
+  return getDb()
     .prepare(
       `SELECT member_id, service_date, status FROM attendance WHERE service_date IN (${placeholders})`,
     )
