@@ -1,6 +1,6 @@
 import { listMembers, SOLDIER_SOK, type Member, type Role } from '../domain/members.js';
-import { attendanceInRange, isAttended, type Status } from '../domain/attendance.js';
-import { visitsInRange } from '../domain/visitlog.js';
+import { attendanceInRange, isAttended, type RangeRow, type Status } from '../domain/attendance.js';
+import { visitsInRange, type Visit } from '../domain/visitlog.js';
 import { sundaysInRange } from '../domain/sundays.js';
 
 // PDF에서 별도 섹션으로 분리된다. 새가족은 속이 아니라 신분이므로 속 이름이 아니라 섹션 이름이다.
@@ -70,16 +70,32 @@ function leaderKey(members: GridMember[]): { year: number; name: string } {
 }
 
 // Build the printable grid model for a Sunday range (current-속 grouping).
+// Only wiring lives here; the model itself is composed by the pure function below.
 export function buildGrid(fromISO: string, toISO: string): GridData {
   const dates = sundaysInRange(fromISO, toISO);
-  const members = listMembers({ activeOnly: true }); // sorted: sok, role, birth_year, name
+  return composeGrid(
+    dates,
+    listMembers({ activeOnly: true }), // sorted: stage, sok, role, birth_year, name
+    attendanceInRange(dates),
+    visitsInRange(dates),
+  );
+}
 
+/**
+ * 격자 모델을 만든다. DB를 보지 않으므로 배열만으로 검증할 수 있다 —
+ * 섹션 분류·밴드 정렬·출석합계가 이 앱의 실제 판단이 들어 있는 자리다.
+ */
+export function composeGrid(
+  dates: string[],
+  members: Member[],
+  rows: RangeRow[],
+  visitRows: Visit[],
+): GridData {
   const memberById = new Map<number, Member>();
   for (const m of members) memberById.set(m.id, m);
 
   // member_id -> (date -> status)
   const byMember = new Map<number, Map<string, Status>>();
-  const rows = attendanceInRange(dates);
   for (const r of rows) {
     let m = byMember.get(r.member_id);
     if (!m) byMember.set(r.member_id, (m = new Map()));
@@ -119,7 +135,7 @@ export function buildGrid(fromISO: string, toISO: string): GridData {
   // ---- 방문 로그: visit_log 를 날짜별로 ----
   const visitMap = new Map<string, string[]>();
   for (const d of dates) visitMap.set(d, []);
-  for (const v of visitsInRange(dates)) visitMap.get(v.visit_date)?.push(v.name);
+  for (const v of visitRows) visitMap.get(v.visit_date)?.push(v.name);
   const visits: VisitLog[] = dates.map((d) => ({ date: d, names: visitMap.get(d) ?? [] }));
 
   // ---- 출석합계: 주차별 청년 / 새신자 / 합계 ----
