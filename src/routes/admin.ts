@@ -14,6 +14,8 @@ import {
   listMembers,
   listSoks,
   normalizeBirthYear,
+  sokNameFromLeader,
+  FIXED_SOKS,
   ROLES,
   type NewMember,
   setActive,
@@ -21,7 +23,7 @@ import {
   type Member,
 } from '../domain/members.js';
 import { parseRoster } from '../import/excel.js';
-import { buildGrid, SOLDIER } from '../report/grid.js';
+import { buildGrid } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
 import { renderPdf } from '../report/pdf.js';
 import { currentSunday, recentSundays } from '../domain/sundays.js';
@@ -102,7 +104,7 @@ adminRoutes.get('/members', (c) => {
 });
 
 adminRoutes.post('/members', async (c) => {
-  const parsed = parseMemberForm(await c.req.parseBody());
+  const parsed = parseMemberForm(await c.req.parseBody(), sokOptions());
   if ('error' in parsed) return c.html(errorPage(parsed.error, '/admin/members'), 400);
   createMember(parsed.value);
   return c.redirect('/admin/members');
@@ -126,7 +128,7 @@ adminRoutes.post('/members/:id', async (c) => {
   const existing = getMember(id);
   if (!existing) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
   if (existing.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
-  const parsed = parseMemberForm(await c.req.parseBody());
+  const parsed = parseMemberForm(await c.req.parseBody(), sokOptions());
   if ('error' in parsed) return c.html(errorPage(parsed.error, `/admin/members/${id}/edit`), 400);
   updateMember(id, parsed.value);
   return c.redirect('/admin/members');
@@ -315,9 +317,10 @@ function groupBySok(members: Member[]): [string, Member[]][] {
   return [...map.entries()]; // listMembers already sorted by sok, role, name
 }
 
-// 속은 반드시 속장을 갖는다(군인속만 예외). 그래서 **속이 생기는 길은 속장이 생기는
-// 길뿐**이고, 폼도 그렇게 생겼다 — 평소에는 목록에서 고르기만 하고, 새 속은 직분이
-// 속장일 때만 만들어진다. 자유 입력이면 오타 한 건이 그 사람을 별도 속으로 그린다.
+// 속은 반드시 속장을 갖는다(군인속만 예외). **속은 속장이 생기면서 생기므로**
+// 속 이름을 따로 받지 않는다 — 속장을 넣고 속을 비워 두면 그 사람의 이름에서
+// 만들어진다. 나머지 직분은 있는 속에서 고르기만 한다. 자유 입력이면 오타 한 건이
+// 그 사람을 조용히 별도 속으로 그린다.
 function memberForm(opts: { action: string; member?: Member; soks: string[] }) {
   const m = opts.member;
   return html`
@@ -326,45 +329,48 @@ function memberForm(opts: { action: string; member?: Member; soks: string[] }) {
       <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
       <label>직분
         <select name="role">
-          ${ROLES.map((r) => html`<option value="${r}" ${m?.role === r ? raw('selected') : raw('')}>${r}</option>`)}
+          ${ROLES.map(
+            (r) => html`<option value="${r}" ${(m?.role ?? '속원') === r ? raw('selected') : raw('')}>${r}</option>`,
+          )}
         </select>
       </label>
-      <label>속
+      <label>속 (속장은 비워 두면 <strong>이름에서 새 속이 만들어집니다</strong>)
         <select name="sok">
           <option value="">— 선택 —</option>
           ${opts.soks.map((s) => html`<option value="${s}" ${m?.sok === s ? raw('selected') : raw('')}>${s}</option>`)}
         </select>
       </label>
-      <label>새 속 만들기 (직분이 <strong>속장</strong>일 때만)
-        <input name="new_sok" placeholder="예: 갑자속 — 비워 두면 위에서 고른 속" />
-      </label>
       <button type="submit">저장</button>
     </form>`;
 }
 
-// 군인속은 속장이 없어 위 규칙으로는 만들어질 수 없으므로 목록에 항상 둔다.
+// 군인속은 속장이 없고 새가족속은 이름이 속장에서 나오지 않는다. 둘 다 위 규칙으로는
+// 만들어질 수 없으므로 목록에 항상 둔다.
 function sokOptions(): string[] {
-  return [...new Set([...listSoks(), SOLDIER])].sort((a, b) => a.localeCompare(b, 'ko'));
+  return [...new Set([...listSoks(), ...FIXED_SOKS])].sort((a, b) => a.localeCompare(b, 'ko'));
 }
 
 // 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 없으므로 여기서 만들지 않는다.
 type ParsedForm = { value: NewMember } | { error: string };
-function parseMemberForm(body: Record<string, unknown>): ParsedForm {
+function parseMemberForm(body: Record<string, unknown>, existingSoks: string[]): ParsedForm {
   const name = String(body.name ?? '').trim();
   const sok = String(body.sok ?? '').trim();
-  const newSok = String(body.new_sok ?? '').trim();
   const role = String(body.role ?? '').trim();
   const birthRaw = String(body.birth_year ?? '').trim();
   const birth = birthRaw === '' ? null : normalizeBirthYear(birthRaw);
   if (!name) return { error: '이름을 입력하세요.' };
   if (birthRaw !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
   if (!isRole(role)) return { error: '직분이 올바르지 않습니다.' };
-  if (newSok && role !== '속장') {
-    return { error: '새 속은 속장만 만들 수 있습니다. 직분을 속장으로 하거나, 이미 있는 속에서 고르세요.' };
+  if (sok) return { value: { name, birth_year: birth, stage: '성도', sok, role } };
+
+  // 속을 고르지 않았다. 속장이면 그 사람에게서 새 속이 생기고, 아니면 고를 수밖에 없다.
+  if (role !== '속장') return { error: '속을 고르세요. 새 속은 속장을 넣을 때만 생깁니다.' };
+  const derived = sokNameFromLeader(name);
+  if (!derived) return { error: '속장 이름이 두 글자 이상이어야 속 이름을 만들 수 있습니다.' };
+  if (existingSoks.includes(derived)) {
+    return { error: `이미 ${derived}이 있습니다. 그 속의 속장을 맡기려면 목록에서 ${derived}을 고르세요.` };
   }
-  const chosen = newSok || sok;
-  if (!chosen) return { error: '속을 고르거나, 속장이라면 새 속 이름을 넣으세요.' };
-  return { value: { name, birth_year: birth, stage: '성도', sok: chosen, role } };
+  return { value: { name, birth_year: birth, stage: '성도', sok: derived, role } };
 }
 
 function errorPage(message: string, back: string) {

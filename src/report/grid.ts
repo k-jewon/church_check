@@ -1,11 +1,11 @@
-import { listMembers, type Member, type Role } from '../domain/members.js';
+import { listMembers, SOLDIER_SOK, type Member, type Role } from '../domain/members.js';
 import { attendanceInRange, isAttended, type Status } from '../domain/attendance.js';
 import { visitsInRange } from '../domain/visitlog.js';
 import { sundaysInRange } from '../domain/sundays.js';
 
 // PDF에서 별도 섹션으로 분리된다. 새가족은 속이 아니라 신분이므로 속 이름이 아니라 섹션 이름이다.
 export const NEW_FAMILY = '새가족';
-export const SOLDIER = '군인';
+export const SOLDIER = SOLDIER_SOK;
 
 export type SokKind = 'normal' | 'newfamily' | 'soldier';
 
