@@ -5,7 +5,6 @@ import { endSession, requireRole, roleForPassword, startSession } from './auth/m
 import { html, page, raw } from './views/layout.js';
 import { adminRoutes } from './routes/admin.js';
 import { inputRoutes } from './routes/input.js';
-import { visitorRoutes } from './routes/visitors.js';
 
 // Build the Hono app. Kept separate from server.ts so that first-run config
 // setup (bootstrap) can run before any module that imports config.js loads.
@@ -48,11 +47,6 @@ export function createApp(): Hono {
   app.use('/admin', requireRole('admin'));
   app.use('/admin/*', requireRole('admin'));
   app.route('/admin', adminRoutes);
-
-  // Visitor log (register/list = input; promote = admin, guarded in the route).
-  app.use('/visitors', requireRole('input'));
-  app.use('/visitors/*', requireRole('input'));
-  app.route('/visitors', visitorRoutes);
 
   // Input UI (home + /input/*), gated by input-level access.
   app.use('/', requireRole('input'));

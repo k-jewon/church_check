@@ -42,7 +42,14 @@ export async function parseRoster(data: ArrayBuffer | Buffer): Promise<ParseResu
       return;
     }
 
-    members.push({ name, birth_year: birthYear as number, sok, role: role as NewMember['role'] });
+    // 명단 엑셀은 정식 성도만 담는다. 새가족은 앱의 등록 경로로 생긴다.
+    members.push({
+      name,
+      birth_year: birthYear as number,
+      stage: '성도',
+      sok,
+      role: role as NewMember['role'],
+    });
   });
 
   return { members, errors };

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { SCHEMA_SQL } from './schema.js';
+import { SCHEMA_SQL, SCHEMA_V2_SQL } from './schema.js';
 
 export type Migration = { version: number; up: (db: DatabaseSync) => void };
 
@@ -7,6 +7,7 @@ export type Migration = { version: number; up: (db: DatabaseSync) => void };
 // it is all CREATE ... IF NOT EXISTS, so re-running it on an existing DB is a no-op.
 export const MIGRATIONS: Migration[] = [
   { version: 1, up: (db) => db.exec(SCHEMA_SQL) },
+  { version: 2, up: (db) => db.exec(SCHEMA_V2_SQL) },
 ];
 
 export function userVersion(db: DatabaseSync): number {

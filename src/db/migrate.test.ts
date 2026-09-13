@@ -22,15 +22,16 @@ test('fresh DB: migrates to the latest version and creates the schema', () => {
 
   assert.equal(migrate(db), LATEST);
   assert.equal(userVersion(db), LATEST);
-  for (const t of ['member', 'attendance', 'visitor']) {
+  for (const t of ['member', 'attendance', 'newfamily_profile', 'newfamily_session', 'visit_log']) {
     assert.ok(tableNames(db).includes(t), `${t} missing`);
   }
+  assert.ok(!tableNames(db).includes('visitor'), 'visitor should be gone');
 });
 
 test('re-running applies nothing and keeps data', () => {
   const db = new DatabaseSync(':memory:');
   migrate(db);
-  db.exec("INSERT INTO member (name, sok, role) VALUES ('홍길동', '길동속', '속장')");
+  db.exec("INSERT INTO member (name, stage, sok, role) VALUES ('홍길동', '성도', '길동속', '속장')");
 
   assert.equal(migrate(db), LATEST);
   const row = db.prepare('SELECT COUNT(*) AS n FROM member').get() as { n: number };

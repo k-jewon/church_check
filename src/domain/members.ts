@@ -4,19 +4,27 @@ export type Role = '속장' | '부속장' | '속원';
 export const ROLES: Role[] = ['속장', '부속장', '속원'];
 const ROLE_RANK: Record<Role, number> = { 속장: 0, 부속장: 1, 속원: 2 };
 
+// 신분. 속은 정식 성도만 갖고, 새가족은 4주 과정을 마쳐야 성도가 된다.
+// 방문자는 사람 레코드가 아니므로(visit_log) 여기에 없다.
+export type Stage = '새가족' | '성도';
+export const STAGES: Stage[] = ['새가족', '성도'];
+const STAGE_RANK: Record<Stage, number> = { 성도: 0, 새가족: 1 };
+
 export interface Member {
   id: number;
   name: string;
-  birth_year: number | null; // 4-digit; null for 방문자 등 미입력
-  sok: string;
-  role: Role;
+  birth_year: number | null; // 4-digit; 미입력이면 null
+  stage: Stage;
+  sok: string | null; // 성도만 갖는다
+  role: Role | null; // 성도만 갖는다
   active: number; // 0 | 1
 }
 export interface NewMember {
   name: string;
   birth_year: number | null;
-  sok: string;
-  role: Role;
+  stage: Stage;
+  sok: string | null;
+  role: Role | null;
 }
 
 // Accept 2-digit (90, 00) or 4-digit (1990) input; store as 4-digit.
@@ -40,11 +48,21 @@ export function isRole(v: unknown): v is Role {
   return v === '속장' || v === '부속장' || v === '속원';
 }
 
+export function isStage(v: unknown): v is Stage {
+  return v === '새가족' || v === '성도';
+}
+
+// 직분이 없는 새가족은 속원 뒤로 보낸다.
+export function roleRank(role: Role | null): number {
+  return role === null ? ROLES.length : ROLE_RANK[role];
+}
+
 function sortMembers(rows: Member[]): Member[] {
   return rows.slice().sort(
     (a, b) =>
-      a.sok.localeCompare(b.sok, 'ko') ||
-      ROLE_RANK[a.role] - ROLE_RANK[b.role] ||
+      STAGE_RANK[a.stage] - STAGE_RANK[b.stage] ||
+      (a.sok ?? '').localeCompare(b.sok ?? '', 'ko') ||
+      roleRank(a.role) - roleRank(b.role) ||
       (a.birth_year ?? Infinity) - (b.birth_year ?? Infinity) ||
       a.name.localeCompare(b.name, 'ko'),
   );
@@ -65,19 +83,15 @@ export function getMember(id: number): Member | undefined {
 
 export function createMember(m: NewMember): number {
   const info = db
-    .prepare('INSERT INTO member (name, birth_year, sok, role) VALUES (?, ?, ?, ?)')
-    .run(m.name, m.birth_year, m.sok, m.role);
+    .prepare('INSERT INTO member (name, birth_year, stage, sok, role) VALUES (?, ?, ?, ?, ?)')
+    .run(m.name, m.birth_year, m.stage, m.sok, m.role);
   return Number(info.lastInsertRowid);
 }
 
 export function updateMember(id: number, m: NewMember): void {
-  db.prepare('UPDATE member SET name = ?, birth_year = ?, sok = ?, role = ? WHERE id = ?').run(
-    m.name,
-    m.birth_year,
-    m.sok,
-    m.role,
-    id,
-  );
+  db.prepare(
+    'UPDATE member SET name = ?, birth_year = ?, stage = ?, sok = ?, role = ? WHERE id = ?',
+  ).run(m.name, m.birth_year, m.stage, m.sok, m.role, id);
 }
 
 export function setActive(id: number, active: boolean): void {
@@ -87,8 +101,10 @@ export function setActive(id: number, active: boolean): void {
 export function insertMany(members: NewMember[]): number {
   db.exec('BEGIN');
   try {
-    const stmt = db.prepare('INSERT INTO member (name, birth_year, sok, role) VALUES (?, ?, ?, ?)');
-    for (const m of members) stmt.run(m.name, m.birth_year, m.sok, m.role);
+    const stmt = db.prepare(
+      'INSERT INTO member (name, birth_year, stage, sok, role) VALUES (?, ?, ?, ?, ?)',
+    );
+    for (const m of members) stmt.run(m.name, m.birth_year, m.stage, m.sok, m.role);
     db.exec('COMMIT');
     return members.length;
   } catch (err) {
@@ -103,6 +119,8 @@ export function deleteAllMembers(): void {
 }
 
 export function listSoks(): string[] {
-  const rows = db.prepare('SELECT DISTINCT sok FROM member').all() as { sok: string }[];
+  const rows = db
+    .prepare('SELECT DISTINCT sok FROM member WHERE sok IS NOT NULL')
+    .all() as { sok: string }[];
   return rows.map((r) => r.sok).sort((a, b) => a.localeCompare(b, 'ko'));
 }

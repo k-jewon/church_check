@@ -22,7 +22,8 @@ export const inputRoutes = new Hono();
 
 function memberLabel(m: Member): string {
   const by = formatBirthYear(m.birth_year);
-  return by ? `${m.name}(${by}) - ${m.sok}` : `${m.name} - ${m.sok}`;
+  const group = m.sok ?? m.stage; // 새가족은 속이 없다
+  return by ? `${m.name}(${by}) - ${group}` : `${m.name} - ${group}`;
 }
 
 function resolveDate(raw: string | undefined): string {
@@ -154,7 +155,7 @@ inputRoutes.get('/input/status', async (c) => {
       ? html`${list.map(
           (m) => html`
             <li>
-              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok} · ${m.role}</span>
+              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok ?? m.stage}${m.role ? ` · ${m.role}` : ''}</span>
               <span class="row-actions">
                 <form method="post" action="/input/status/set" class="inline">
                   <input type="hidden" name="memberId" value="${m.id}" />
@@ -175,7 +176,7 @@ inputRoutes.get('/input/status', async (c) => {
       ? html`${shown.map(
           (m) => html`
             <li>
-              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok} · ${m.role}</span>
+              <span>${m.name}(${formatBirthYear(m.birth_year)}) · ${m.sok ?? m.stage}${m.role ? ` · ${m.role}` : ''}</span>
               <span class="row-actions">
                 <form method="post" action="/input/status/set" class="inline">
                   <input type="hidden" name="memberId" value="${m.id}" />

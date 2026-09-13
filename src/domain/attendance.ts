@@ -1,5 +1,5 @@
 import { db } from '../db/index.js';
-import type { Member, Role } from './members.js';
+import { roleRank, type Member } from './members.js';
 
 export type Status = 'before' | 'praise' | 'after' | 'main' | 'etc';
 
@@ -57,13 +57,15 @@ export function hasConsecutiveAbsence(seqChrono: (Status | null)[], n = 3): bool
 }
 
 // ---- persistence ----
+// 당시 신분과 당시 속을 함께 박는다. 나중에 속이 바뀌어도 과거 지면이 소급해 다시 그려지지 않는다.
+// 이미 있는 행을 고칠 때 스냅샷은 건드리지 않는다 — 그 행이 말하는 것은 지금이 아니라 그날이다.
 export function mark(memberId: number, date: string, status: Status): void {
   db.prepare(
-    `INSERT INTO attendance (member_id, service_date, status)
-     VALUES (?, ?, ?)
+    `INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at)
+     SELECT ?, ?, ?, m.stage, m.sok FROM member m WHERE m.id = ?
      ON CONFLICT (member_id, service_date)
      DO UPDATE SET status = excluded.status, updated_at = datetime('now','localtime')`,
-  ).run(memberId, date, status);
+  ).run(memberId, date, status, memberId);
 }
 
 export function countAttendance(): number {
@@ -161,12 +163,11 @@ export function attendanceInRange(dates: string[]): RangeRow[] {
     .all(...dates) as unknown as RangeRow[];
 }
 
-const ROLE_RANK: Record<Role, number> = { 속장: 0, 부속장: 1, 속원: 2 };
 function sortRoster<T extends Member>(rows: T[]): T[] {
   return rows.slice().sort(
     (a, b) =>
-      a.sok.localeCompare(b.sok, 'ko') ||
-      ROLE_RANK[a.role] - ROLE_RANK[b.role] ||
+      (a.sok ?? '').localeCompare(b.sok ?? '', 'ko') ||
+      roleRank(a.role) - roleRank(b.role) ||
       a.name.localeCompare(b.name, 'ko'),
   );
 }

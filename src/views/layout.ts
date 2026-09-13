@@ -54,7 +54,6 @@ function nav(section: Section, role: 'input' | 'admin' | null): Raw {
       <span class="mode-badge input">입력 모드</span>
       <span class="spacer"></span>
       <a href="/">입력</a>
-      <a href="/visitors">방문자</a>
       ${role === 'admin' ? html`<a class="mode-switch" href="/admin">관리자 모드로 →</a>` : raw('')}
       <form method="post" action="/logout" class="inline">
         <button class="linklike" type="submit">로그아웃</button>
