@@ -48,6 +48,18 @@ export function isRole(v: unknown): v is Role {
   return v === '속장' || v === '부속장' || v === '속원';
 }
 
+// 속장에서 파생되지 않는 두 속. 군인속은 속장이 없고, 새가족속은 이름이 속장에서 나오지 않는다.
+export const SOLDIER_SOK = '군인';
+export const NEW_FAMILY_SOK = '새가족속';
+export const FIXED_SOKS: string[] = [NEW_FAMILY_SOK, SOLDIER_SOK];
+
+// 속은 속장이 생기면서 생긴다. 이름은 속장 이름의 뒤 두 글자 + `속`이다
+// (원본 최신본의 일반 속 13개 전부 이 규칙을 따른다 — 티켓 15 판독).
+export function sokNameFromLeader(leaderName: string): string | null {
+  const n = leaderName.trim();
+  return n.length >= 2 ? n.slice(-2) + '속' : null;
+}
+
 export function isStage(v: unknown): v is Stage {
   return v === '새가족' || v === '성도';
 }
