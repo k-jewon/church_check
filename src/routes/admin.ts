@@ -63,7 +63,9 @@ adminRoutes.get('/', (c) => {
 });
 
 // ---- Member list + add form ----
-adminRoutes.get('/members', (c) => {
+adminRoutes.get('/members', (c) => c.html(membersPage()));
+
+function membersPage(opts?: { values?: FormValues; alert?: string }) {
   const members = listMembers();
   const soks = groupBySok(members);
   const list = soks.length
@@ -99,14 +101,18 @@ adminRoutes.get('/members', (c) => {
     </div>
     <div class="card">
       <h2>성도 추가</h2>
-      ${memberForm({ action: '/admin/members', soks: sokOptions() })}
-    </div>`;
-  return c.html(page({ title: '명단 관리', section: 'admin', body }));
-});
+      ${memberForm({ action: '/admin/members', soks: sokOptions(), values: opts?.values })}
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '명단 관리', section: 'admin', body });
+}
 
 adminRoutes.post('/members', async (c) => {
-  const parsed = parseMemberForm(await c.req.parseBody(), { members: listMembers() });
-  if ('error' in parsed) return c.html(errorPage(parsed.error, '/admin/members'), 400);
+  const body = await c.req.parseBody();
+  const parsed = parseMemberForm(body, { members: listMembers() });
+  if ('error' in parsed) {
+    return c.html(membersPage({ values: formValues(body), alert: parsed.error }), 400);
+  }
   createMember(parsed.value);
   return c.redirect('/admin/members');
 });
@@ -116,24 +122,37 @@ adminRoutes.get('/members/:id/edit', (c) => {
   const m = getMember(id);
   if (!m) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
   if (m.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
+  return c.html(editPage(m));
+});
+
+function editPage(m: Member, opts?: { values?: FormValues; alert?: string }) {
   const body = html`
     <div class="card">
       <h1>성도 수정</h1>
-      ${memberForm({ action: `/admin/members/${m.id}`, member: m, soks: sokOptions() })}
-    </div>`;
-  return c.html(page({ title: '성도 수정', section: 'admin', body }));
-});
+      ${memberForm({
+        action: `/admin/members/${m.id}`,
+        member: m,
+        soks: sokOptions(),
+        values: opts?.values,
+      })}
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '성도 수정', section: 'admin', body });
+}
 
 adminRoutes.post('/members/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const existing = getMember(id);
   if (!existing) return c.html(errorPage('성도를 찾을 수 없습니다.', '/admin/members'), 404);
   if (existing.stage !== '성도') return c.html(errorPage(NEWFAMILY_LOCKED, '/admin/members'), 400);
-  const parsed = parseMemberForm(await c.req.parseBody(), {
+  const rawBody = await c.req.parseBody();
+  const parsed = parseMemberForm(rawBody, {
     members: listMembers(),
     member: existing,
   });
-  if ('error' in parsed) return c.html(errorPage(parsed.error, `/admin/members/${id}/edit`), 400);
+  if ('error' in parsed) {
+    return c.html(editPage(existing, { values: formValues(rawBody), alert: parsed.error }), 400);
+  }
   updateMember(id, parsed.value);
   return c.redirect('/admin/members');
 });
@@ -325,27 +344,54 @@ function groupBySok(members: Member[]): [string, Member[]][] {
 // 속 이름을 따로 받지 않는다 — 속장을 넣고 속을 비워 두면 그 사람의 이름에서
 // 만들어진다. 나머지 직분은 있는 속에서 고르기만 한다. 자유 입력이면 오타 한 건이
 // 그 사람을 조용히 별도 속으로 그린다.
-function memberForm(opts: { action: string; member?: Member; soks: string[] }) {
+// 거부되면 같은 화면을 다시 그리므로, 방금 넣은 값이 살아 있어야 한다.
+export interface FormValues {
+  name: string;
+  birth_year: string;
+  sok: string;
+  role: string;
+}
+
+function formValues(body: Record<string, unknown>): FormValues {
+  return {
+    name: String(body.name ?? '').trim(),
+    birth_year: String(body.birth_year ?? '').trim(),
+    sok: String(body.sok ?? '').trim(),
+    role: String(body.role ?? '').trim(),
+  };
+}
+
+function memberForm(opts: { action: string; member?: Member; soks: string[]; values?: FormValues }) {
   const m = opts.member;
+  const v = opts.values;
+  const name = v?.name ?? m?.name ?? '';
+  const birth = v?.birth_year ?? (m ? formatBirthYear(m.birth_year) : '');
+  const role = v?.role ?? m?.role ?? '속원';
+  const sok = v?.sok ?? m?.sok ?? '';
   return html`
     <form method="post" action="${opts.action}">
-      <label>이름<input name="name" value="${m?.name ?? ''}" required /></label>
-      <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${m ? formatBirthYear(m.birth_year) : ''}" /></label>
+      <label>이름<input name="name" value="${name}" required /></label>
+      <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${birth}" /></label>
       <label>직분
         <select name="role">
-          ${ROLES.map(
-            (r) => html`<option value="${r}" ${(m?.role ?? '속원') === r ? raw('selected') : raw('')}>${r}</option>`,
-          )}
+          ${ROLES.map((r) => html`<option value="${r}" ${role === r ? raw('selected') : raw('')}>${r}</option>`)}
         </select>
       </label>
       <label>속 (속장은 비워 두면 <strong>이름에서 새 속이 만들어집니다</strong>)
         <select name="sok">
           <option value="">— 선택 —</option>
-          ${opts.soks.map((s) => html`<option value="${s}" ${m?.sok === s ? raw('selected') : raw('')}>${s}</option>`)}
+          ${opts.soks.map((s) => html`<option value="${s}" ${sok === s ? raw('selected') : raw('')}>${s}</option>`)}
         </select>
       </label>
       <button type="submit">저장</button>
     </form>`;
+}
+
+// 거부 사유는 페이지를 갈아 끼우지 않고 그 자리에서 알린다.
+function alertScript(message?: string) {
+  if (!message) return raw('');
+  const literal = JSON.stringify(message).replace(/</g, '\u003c');
+  return raw(`<script>alert(${literal});</script>`);
 }
 
 // 군인속은 속장이 없고 새가족속은 이름이 속장에서 나오지 않는다. 둘 다 위 규칙으로는
