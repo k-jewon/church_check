@@ -23,6 +23,16 @@ import {
   updateMember,
   type Member,
 } from '../domain/members.js';
+import {
+  getProfile,
+  isRoute,
+  promoteToBeliever,
+  registerNewFamily,
+  ROUTES,
+  saveProfile,
+  sessionCounts,
+  type NewProfile,
+} from '../domain/newfamily.js';
 import { parseRoster } from '../import/excel.js';
 import { buildGrid } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
@@ -37,9 +47,9 @@ const REPORT_TITLE = '청년부';
 // 이 화면은 정식 성도 명단이다. 새가족은 속·직분이 비어 있는데 아래 폼이 둘 다
 // 요구하므로, 저장하는 순간 신분이 성도로 바뀌고 직분은 드롭다운의 첫 값(속장)이
 // 된다. 승격은 결정이지 수정 화면의 부수 효과가 아니므로 막아 둔다.
-// 새가족 등록·승격 화면이 생기면 이 빗장은 그 화면이 걷어낸다.
+// 빗장은 남되 이제 갈 곳을 가리킨다 — 승격은 `/admin/newfamily` 가 맡는다.
 const NEWFAMILY_LOCKED =
-  '새가족은 이 화면에서 수정할 수 없습니다. 속·직분을 넣어 저장하면 정식 성도가 되어 버립니다.';
+  '새가족은 이 화면에서 수정할 수 없습니다. 속·직분을 넣어 저장하면 정식 성도가 되어 버립니다. 새가족 관리에서 승격하세요.';
 
 export const adminRoutes = new Hono();
 
@@ -52,6 +62,7 @@ adminRoutes.get('/', (c) => {
       <p>등록 성도: <strong>${total}</strong>명</p>
       <ul class="menu">
         <li><a href="/admin/members">명단 관리</a></li>
+        <li><a href="/admin/newfamily">새가족 관리</a></li>
         <li><a href="/admin/upload">명단 엑셀 업로드</a></li>
         <li><a href="/admin/template">명단 템플릿 내려받기</a></li>
         <li><a href="/admin/report">출석부 PDF 만들기</a></li>
@@ -163,6 +174,208 @@ adminRoutes.post('/members/:id/active', async (c) => {
   setActive(id, String(body.active) === '1');
   return c.redirect('/admin/members');
 });
+
+// ---- 새가족 ----
+// 개인정보(연락처·성별·인도자·경로)가 모이는 유일한 화면이라 `/admin/*` 아래에만
+// 둔다. 주일 현장의 출석 체크에는 이 정보가 필요 없다.
+// 근거: context/wayfinder/tickets/12-방문-새가족-등록-경로-통합.md
+adminRoutes.get('/newfamily', (c) => c.html(newFamilyPage()));
+
+function newFamilyPage(opts?: { values?: ProfileFormValues; alert?: string }) {
+  const rows = listMembers().filter((m) => m.stage === '새가족');
+  const counts = sessionCounts();
+
+  const list = rows.length
+    ? html`
+        <ul class="member-list">
+          ${rows.map((m) => {
+            const p = getProfile(m.id);
+            const detail = [p?.phone, p?.gender, p?.inviter ? `인도 ${p.inviter}` : '', routeLabel(p)]
+              .filter(Boolean)
+              .join(' · ');
+            return html`
+              <li class="${m.active ? '' : 'inactive'}">
+                <span>
+                  ${m.name}(${formatBirthYear(m.birth_year)}) ·
+                  <strong>${sessionLabel(counts.get(m.id) ?? 0)}</strong>
+                  ${detail ? html` <span class="muted">${detail}</span>` : raw('')}
+                </span>
+                <span class="row-actions">
+                  <a href="/admin/newfamily/${m.id}/promote">성도로 승격</a>
+                </span>
+              </li>`;
+          })}
+        </ul>`
+    : html`<p class="muted">진행 중인 새가족이 없습니다.</p>`;
+
+  const body = html`
+    <div class="card">
+      <h1>새가족 관리</h1>
+      ${list}
+      <p class="muted">회차는 예배가 아니라 <strong>예배 후 새가족 모임</strong> 참여이며, 주일 출석 입력 화면에서 체크합니다.</p>
+    </div>
+    <div class="card">
+      <h2>새가족 등록</h2>
+      ${profileForm(opts?.values)}
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '새가족 관리', section: 'admin', body });
+}
+
+adminRoutes.post('/newfamily', async (c) => {
+  const body = await c.req.parseBody();
+  const parsed = parseProfileForm(body);
+  if ('error' in parsed) {
+    return c.html(newFamilyPage({ values: profileValues(body), alert: parsed.error }), 400);
+  }
+  registerNewFamily(parsed.member, parsed.profile);
+  return c.redirect('/admin/newfamily');
+});
+
+// 승격 — 속을 배정하는 일이지 인적사항을 고치는 일이 아니므로 속·직분만 받는다.
+// 배정 판정은 성도 추가와 같은 도메인 규칙을 그대로 쓴다.
+adminRoutes.get('/newfamily/:id/promote', (c) => {
+  const m = getMember(Number(c.req.param('id')));
+  if (!m) return c.html(errorPage('새가족을 찾을 수 없습니다.', '/admin/newfamily'), 404);
+  if (m.stage !== '새가족') return c.html(errorPage('이미 정식 성도입니다.', '/admin/newfamily'), 400);
+  return c.html(promotePage(m));
+});
+
+function promotePage(m: Member, opts?: { sok?: string; role?: string; alert?: string }) {
+  const role = opts?.role ?? '속원';
+  const sok = opts?.sok ?? '';
+  const body = html`
+    <div class="card">
+      <h1>성도로 승격</h1>
+      <p><strong>${m.name}</strong>(${formatBirthYear(m.birth_year)}) — 새가족 과정을 마치고 속을 배정받습니다.</p>
+      <form method="post" action="/admin/newfamily/${m.id}/promote">
+        <label>직분
+          <select name="role">
+            ${ROLES.map((r) => html`<option value="${r}" ${role === r ? raw('selected') : raw('')}>${r}</option>`)}
+          </select>
+        </label>
+        <label>속 (속장은 비워 두면 <strong>이름에서 새 속이 만들어집니다</strong>)
+          <select name="sok">
+            <option value="">— 선택 —</option>
+            ${sokOptions().map((s) => html`<option value="${s}" ${sok === s ? raw('selected') : raw('')}>${s}</option>`)}
+          </select>
+        </label>
+        <button type="submit">승격</button>
+      </form>
+      <p class="muted">등록정보와 회차 기록은 그대로 남고, 이미 찍힌 출석도 당시 신분인 <code>새가족</code>으로 남습니다.</p>
+      <p><a href="/admin/newfamily">← 새가족 관리</a></p>
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '성도로 승격', section: 'admin', body });
+}
+
+adminRoutes.post('/newfamily/:id/promote', async (c) => {
+  const id = Number(c.req.param('id'));
+  const m = getMember(id);
+  if (!m) return c.html(errorPage('새가족을 찾을 수 없습니다.', '/admin/newfamily'), 404);
+  if (m.stage !== '새가족') return c.html(errorPage('이미 정식 성도입니다.', '/admin/newfamily'), 400);
+
+  const body = await c.req.parseBody();
+  const role = String(body.role ?? '').trim();
+  const sok = String(body.sok ?? '').trim();
+  const reject = (alert: string) => c.html(promotePage(m, { sok, role, alert }), 400);
+  if (!isRole(role)) return reject('직분이 올바르지 않습니다.');
+
+  const assigned = resolveAssignment({
+    id,
+    name: m.name,
+    role,
+    sok: sok || null,
+    soks: buildSokStates(listMembers()),
+  });
+  if (!assigned.ok) return reject(assigned.error);
+
+  promoteToBeliever(id, assigned.sok, role);
+  return c.redirect('/admin/members');
+});
+
+// 4회를 채우고도 속을 배정받지 못하면 계속 `4주차`로 보인다 — 관계자가 배정되지
+// 않은 사실을 빠르게 인지하기 위한 표기다(소유자 확정).
+function sessionLabel(done: number): string {
+  if (done === 0) return '회차 없음';
+  return done >= 4 ? '4주차' : `${done}주차`;
+}
+
+function routeLabel(p: { route: string | null; route_note: string | null } | undefined): string {
+  if (!p?.route) return '';
+  return p.route === '기타' && p.route_note ? `기타(${p.route_note})` : p.route;
+}
+
+interface ProfileFormValues {
+  name: string;
+  birth_year: string;
+  phone: string;
+  gender: string;
+  inviter: string;
+  route: string;
+  route_note: string;
+}
+
+function profileValues(body: Record<string, unknown>): ProfileFormValues {
+  const s = (k: string) => String(body[k] ?? '').trim();
+  return {
+    name: s('name'),
+    birth_year: s('birth_year'),
+    phone: s('phone'),
+    gender: s('gender'),
+    inviter: s('inviter'),
+    route: s('route'),
+    route_note: s('route_note'),
+  };
+}
+
+const GENDERS = ['남', '여'];
+
+function profileForm(v?: ProfileFormValues) {
+  return html`
+    <form method="post" action="/admin/newfamily">
+      <label>이름<input name="name" value="${v?.name ?? ''}" required /></label>
+      <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${v?.birth_year ?? ''}" /></label>
+      <label>연락처<input name="phone" value="${v?.phone ?? ''}" /></label>
+      <label>성별
+        <select name="gender">
+          <option value="">— 선택 —</option>
+          ${GENDERS.map((g) => html`<option value="${g}" ${v?.gender === g ? raw('selected') : raw('')}>${g}</option>`)}
+        </select>
+      </label>
+      <label>인도자<input name="inviter" value="${v?.inviter ?? ''}" /></label>
+      <label>방문경로
+        <select name="route">
+          <option value="">— 선택 —</option>
+          ${ROUTES.map((r) => html`<option value="${r}" ${v?.route === r ? raw('selected') : raw('')}>${r}</option>`)}
+        </select>
+      </label>
+      <label>방문경로 상세 (<code>기타</code>일 때만 저장됩니다)<input name="route_note" value="${v?.route_note ?? ''}" /></label>
+      <button type="submit">등록</button>
+    </form>`;
+}
+
+type ParsedProfile =
+  | { member: { name: string; birth_year: number | null }; profile: NewProfile }
+  | { error: string };
+
+function parseProfileForm(body: Record<string, unknown>): ParsedProfile {
+  const v = profileValues(body);
+  if (!v.name) return { error: '이름을 입력하세요.' };
+  const birth = v.birth_year === '' ? null : normalizeBirthYear(v.birth_year);
+  if (v.birth_year !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
+  if (v.route !== '' && !isRoute(v.route)) return { error: '방문경로가 올바르지 않습니다.' };
+  return {
+    member: { name: v.name, birth_year: birth },
+    profile: {
+      phone: v.phone || null,
+      gender: v.gender || null,
+      inviter: v.inviter || null,
+      route: isRoute(v.route) ? v.route : null,
+      route_note: v.route_note || null,
+    },
+  };
+}
 
 // ---- Template download ----
 adminRoutes.get('/template', (c) => {
