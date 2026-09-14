@@ -112,6 +112,18 @@ export function sessionsOn(meetingDate: string): Set<number> {
   return new Set(rows.map((r) => r.member_id));
 }
 
+export interface SessionRow {
+  member_id: number;
+  meeting_date: string;
+}
+
+// 출석부의 `1주`~`4주` 칸을 채울 때 한 번에 읽는다. 승격한 사람의 회차도 남아 있다.
+export function allSessions(): SessionRow[] {
+  return getDb()
+    .prepare('SELECT member_id, meeting_date FROM newfamily_session ORDER BY meeting_date')
+    .all() as unknown as SessionRow[];
+}
+
 // 목록 화면이 새가족마다 한 번씩 세지 않도록 한 번에 읽는다.
 export function sessionCounts(): Map<number, number> {
   const rows = getDb()
