@@ -1,6 +1,6 @@
 import { esc } from '../views/layout.js';
 import type { Status } from '../domain/attendance.js';
-import type { GridData, GridSok } from './grid.js';
+import { SESSION_COLS, type GridData, type GridSok } from './grid.js';
 import { formatBirthYear } from '../domain/members.js';
 
 // Compact single-glyph symbols for the dense grid.
@@ -33,11 +33,28 @@ export interface ReportMeta {
   to: string;
 }
 
+// 새가족 섹션은 날짜 열 대신 모임 회차 열을 쓰고, 칸에는 심볼이 아니라 모임 날짜를 적는다.
+const SESSION_HEADERS = Array.from(
+  { length: SESSION_COLS },
+  (_, i) => `<th class="date-col">${i + 1}주</th>`,
+).join('');
+const SESSION_EMPTY = '<td></td>'.repeat(SESSION_COLS);
+
 // 밴드(행)의 최다 인원 속에 맞춰 부족한 속은 빈 행으로 채워 높이를 통일한다.
 function sokTable(sok: GridSok, dateHeaders: string, maxRows: number, emptyCells: string): string {
+  const newfamily = sok.kind === 'newfamily';
+  if (newfamily) {
+    dateHeaders = SESSION_HEADERS;
+    emptyCells = SESSION_EMPTY;
+  }
   const rows = sok.members
     .map((m) => {
-      const cells = m.statuses.map((s) => `<td>${s ? SYMBOL[s] : ''}</td>`).join('');
+      const cells = newfamily
+        ? Array.from({ length: SESSION_COLS }, (_, i) => {
+            const d = m.sessions[i];
+            return `<td>${d ? esc(md(d)) : ''}</td>`;
+          }).join('')
+        : m.statuses.map((s) => `<td>${s ? SYMBOL[s] : ''}</td>`).join('');
       const nameCls = m.isLeader ? 'name leader' : 'name';
       return `<tr><td class="${nameCls}">${nameCell(m.name, m.birth_year)}</td>${cells}</tr>`;
     })
@@ -83,7 +100,7 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   // 출석합계 표
   const sumHead = grid.summary.map((s) => `<th>${esc(md(s.date))}</th>`).join('');
   const sumYouth = grid.summary.map((s) => `<td>${s.youth}</td>`).join('');
-  const sumNew = grid.summary.map((s) => `<td>${s.newBeliever}</td>`).join('');
+  const sumNew = grid.summary.map((s) => `<td>${s.newFamilyEtc}</td>`).join('');
   const sumTotal = grid.summary.map((s) => `<td>${s.total}</td>`).join('');
 
   return `<!doctype html>
@@ -132,7 +149,7 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
         <thead><tr><th class="rowlabel">출석합계</th>${sumHead}</tr></thead>
         <tbody>
           <tr><td class="rowlabel">청년</td>${sumYouth}</tr>
-          <tr><td class="rowlabel">새신자</td>${sumNew}</tr>
+          <tr><td class="rowlabel">새가족+기타</td>${sumNew}</tr>
           <tr class="total"><td class="rowlabel">합계</td>${sumTotal}</tr>
         </tbody>
       </table>

@@ -1,5 +1,5 @@
 import { getDb } from '../db/index.js';
-import { roleRank, type Member } from './members.js';
+import { roleRank, type Member, type Stage } from './members.js';
 
 export type Status = 'before' | 'praise' | 'after' | 'main' | 'etc';
 
@@ -152,13 +152,16 @@ export interface RangeRow {
   member_id: number;
   service_date: string;
   status: Status;
+  stage_at: Stage; // 그날의 신분
+  sok_at: string | null; // 그날의 속
 }
 export function attendanceInRange(dates: string[]): RangeRow[] {
   if (!dates.length) return [];
   const placeholders = dates.map(() => '?').join(',');
   return getDb()
     .prepare(
-      `SELECT member_id, service_date, status FROM attendance WHERE service_date IN (${placeholders})`,
+      `SELECT member_id, service_date, status, stage_at, sok_at FROM attendance
+       WHERE service_date IN (${placeholders})`,
     )
     .all(...dates) as unknown as RangeRow[];
 }
