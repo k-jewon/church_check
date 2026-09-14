@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { readFileSync, unlinkSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { getDb, DB_PATH } from '../db/index.js';
-import { html, page, raw } from '../views/layout.js';
+import { alertScript, html, page, raw } from '../views/layout.js';
 import {
   countMembers,
   createMember,
@@ -29,10 +29,15 @@ import {
   promoteToBeliever,
   registerNewFamily,
   ROUTES,
-  saveProfile,
   sessionCounts,
   type NewProfile,
 } from '../domain/newfamily.js';
+import {
+  parseProfileForm,
+  profileForm,
+  profileValues,
+  type ProfileFormValues,
+} from '../views/newfamily-form.js';
 import { parseRoster } from '../import/excel.js';
 import { buildGrid } from '../report/grid.js';
 import { renderReportHTML } from '../report/template.js';
@@ -216,7 +221,7 @@ function newFamilyPage(opts?: { values?: ProfileFormValues; alert?: string }) {
     </div>
     <div class="card">
       <h2>새가족 등록</h2>
-      ${profileForm(opts?.values)}
+      ${profileForm('/admin/newfamily', opts?.values)}
     </div>
     ${alertScript(opts?.alert)}`;
   return page({ title: '새가족 관리', section: 'admin', body });
@@ -304,77 +309,6 @@ function sessionLabel(done: number): string {
 function routeLabel(p: { route: string | null; route_note: string | null } | undefined): string {
   if (!p?.route) return '';
   return p.route === '기타' && p.route_note ? `기타(${p.route_note})` : p.route;
-}
-
-interface ProfileFormValues {
-  name: string;
-  birth_year: string;
-  phone: string;
-  gender: string;
-  inviter: string;
-  route: string;
-  route_note: string;
-}
-
-function profileValues(body: Record<string, unknown>): ProfileFormValues {
-  const s = (k: string) => String(body[k] ?? '').trim();
-  return {
-    name: s('name'),
-    birth_year: s('birth_year'),
-    phone: s('phone'),
-    gender: s('gender'),
-    inviter: s('inviter'),
-    route: s('route'),
-    route_note: s('route_note'),
-  };
-}
-
-const GENDERS = ['남', '여'];
-
-function profileForm(v?: ProfileFormValues) {
-  return html`
-    <form method="post" action="/admin/newfamily">
-      <label>이름<input name="name" value="${v?.name ?? ''}" required /></label>
-      <label>출생연도 (2자리 또는 4자리 · 미입력 가능)<input name="birth_year" value="${v?.birth_year ?? ''}" /></label>
-      <label>연락처<input name="phone" value="${v?.phone ?? ''}" /></label>
-      <label>성별
-        <select name="gender">
-          <option value="">— 선택 —</option>
-          ${GENDERS.map((g) => html`<option value="${g}" ${v?.gender === g ? raw('selected') : raw('')}>${g}</option>`)}
-        </select>
-      </label>
-      <label>인도자<input name="inviter" value="${v?.inviter ?? ''}" /></label>
-      <label>방문경로
-        <select name="route">
-          <option value="">— 선택 —</option>
-          ${ROUTES.map((r) => html`<option value="${r}" ${v?.route === r ? raw('selected') : raw('')}>${r}</option>`)}
-        </select>
-      </label>
-      <label>방문경로 상세 (<code>기타</code>일 때만 저장됩니다)<input name="route_note" value="${v?.route_note ?? ''}" /></label>
-      <button type="submit">등록</button>
-    </form>`;
-}
-
-type ParsedProfile =
-  | { member: { name: string; birth_year: number | null }; profile: NewProfile }
-  | { error: string };
-
-function parseProfileForm(body: Record<string, unknown>): ParsedProfile {
-  const v = profileValues(body);
-  if (!v.name) return { error: '이름을 입력하세요.' };
-  const birth = v.birth_year === '' ? null : normalizeBirthYear(v.birth_year);
-  if (v.birth_year !== '' && birth === null) return { error: '출생연도가 올바르지 않습니다.' };
-  if (v.route !== '' && !isRoute(v.route)) return { error: '방문경로가 올바르지 않습니다.' };
-  return {
-    member: { name: v.name, birth_year: birth },
-    profile: {
-      phone: v.phone || null,
-      gender: v.gender || null,
-      inviter: v.inviter || null,
-      route: isRoute(v.route) ? v.route : null,
-      route_note: v.route_note || null,
-    },
-  };
 }
 
 // ---- Template download ----
@@ -598,13 +532,6 @@ function memberForm(opts: { action: string; member?: Member; soks: string[]; val
       </label>
       <button type="submit">저장</button>
     </form>`;
-}
-
-// 거부 사유는 페이지를 갈아 끼우지 않고 그 자리에서 알린다.
-function alertScript(message?: string) {
-  if (!message) return raw('');
-  const literal = JSON.stringify(message).replace(/</g, '\u003c');
-  return raw(`<script>alert(${literal});</script>`);
 }
 
 // 군인속은 속장이 없고 새가족속은 이름이 속장에서 나오지 않는다. 둘 다 위 규칙으로는
