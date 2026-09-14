@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { html, page, raw, type Raw } from '../views/layout.js';
-import { formatBirthYear, type Member } from '../domain/members.js';
+import { formatBirthYear, getMember, listMembers, type Member } from '../domain/members.js';
 import {
   isStatus,
   labelOf,
@@ -16,6 +16,8 @@ import {
   type Status,
 } from '../domain/attendance.js';
 import { currentSunday, isSunday, recentSundays } from '../domain/sundays.js';
+import { addSession, countSessions, removeSession, sessionsOn } from '../domain/newfamily.js';
+import { addVisit, listVisits, removeVisit } from '../domain/visitlog.js';
 import { currentRole } from '../auth/middleware.js';
 
 export const inputRoutes = new Hono();
@@ -68,7 +70,9 @@ inputRoutes.get('/', async (c) => {
       <ul id="chips" class="chips"></ul>
 
       <p><a href="/input/status?date=${date}">오늘 입력 현황 보기 →</a></p>
-    </div>`;
+      <p><a href="/input/visits?date=${date}">방문 기록 →</a></p>
+    </div>
+    ${newFamilyCard(date)}`;
   return c.html(page({ title: '출석 입력', section: 'input', role, body }));
 });
 
@@ -229,6 +233,120 @@ inputRoutes.post('/input/status/unmark', async (c) => {
   const date = resolveDate(String(body.date));
   if (memberId) unmark(memberId, date);
   return c.redirect(statusBack(date, String(body.filter ?? '')));
+});
+
+// ---- 새가족 모임 회차 ----
+// 회차는 예배가 아니라 **예배 후 새가족 모임** 참여이므로 출석 행에서 유도할 수
+// 없다. 예배 축(출석 상태)에 값을 더하는 대신 체크 한 칸을 따로 둔다 — 한 사람이
+// 같은 주일에 예배도 오고 모임도 하므로 하나의 드롭다운에 담기지 않는다.
+// 근거: context/wayfinder/tickets/12-방문-새가족-등록-경로-통합.md
+inputRoutes.post('/input/session', async (c) => {
+  const body = await c.req.parseBody();
+  const memberId = Number(body.memberId);
+  const date = resolveDate(String(body.date));
+  const m = memberId ? getMember(memberId) : undefined;
+  if (!m || m.stage !== '새가족') return c.text('bad request', 400);
+
+  if (String(body.on) === '1') addSession(memberId, date);
+  else removeSession(memberId, date);
+
+  return c.html(fragment(sessionRow(m, date)));
+});
+
+// 그 주일의 체크 상태와 지금까지의 회차를 함께 그린다. 토글하면 이 <li> 가
+// 통째로 갈린다.
+function sessionRow(m: Member, date: string): Raw {
+  const checked = sessionsOn(date).has(m.id);
+  const done = countSessions(m.id);
+  return html`
+    <li id="nf-${m.id}">
+      <label class="nf-check">
+        <input type="checkbox" ${checked ? raw('checked') : raw('')}
+          hx-post="/input/session"
+          hx-vals='${raw(JSON.stringify({ memberId: m.id, date, on: checked ? '0' : '1' }))}'
+          hx-target="#nf-${m.id}" hx-swap="outerHTML" />
+        <span>${m.name}(${formatBirthYear(m.birth_year)})</span>
+      </label>
+      <span class="muted">${done === 0 ? '회차 없음' : `${Math.min(done, 4)}주차`}</span>
+    </li>`;
+}
+
+function newFamilyCard(date: string): Raw {
+  const rows = listMembers({ activeOnly: true }).filter((m) => m.stage === '새가족');
+  if (!rows.length) return raw('');
+  return html`
+    <div class="card">
+      <h2>새가족 모임</h2>
+      <p class="muted">예배 뒤 모임까지 참여한 사람을 체크하세요. 예배 출석과는 별개입니다.</p>
+      <ul class="member-list">${rows.map((m) => sessionRow(m, date))}</ul>
+    </div>`;
+}
+
+// ---- 방문 ----
+// 방문은 사람 레코드가 아니라 (날짜, 이름) 줄이다. 이력을 잇지 않으므로 같은
+// 이름이 다시 와도 새 줄이고, 무명·별명도 그냥 한 줄이다. 방문자에게는 예배 축이
+// 없어 출석 상태를 묻지 않는다.
+inputRoutes.get('/input/visits', async (c) => {
+  const role = await currentRole(c);
+  const date = resolveDate(c.req.query('date'));
+  const sundays = recentSundays(new Date(), 8).reverse();
+  if (!sundays.includes(date)) sundays.unshift(date);
+  const visits = listVisits(date);
+
+  const list = visits.length
+    ? html`${visits.map(
+        (v) => html`
+          <li>
+            <span>${v.name}</span>
+            <span class="row-actions">
+              <form method="post" action="/input/visits/remove" class="inline">
+                <input type="hidden" name="id" value="${v.id}" />
+                <input type="hidden" name="date" value="${date}" />
+                <button type="submit" class="linklike">삭제</button>
+              </form>
+            </span>
+          </li>`,
+      )}`
+    : html`<li class="muted">이 주일에 적힌 방문자가 없습니다.</li>`;
+
+  const body = html`
+    <div class="card">
+      <h1>방문 기록</h1>
+      <form method="get" action="/input/visits" class="date-form">
+        <label>주일
+          <select name="date" onchange="this.form.submit()">
+            ${sundays.map((s) => html`<option value="${s}" ${s === date ? raw('selected') : raw('')}>${s}</option>`)}
+          </select>
+        </label>
+      </form>
+
+      <form method="post" action="/input/visits">
+        <input type="hidden" name="date" value="${date}" />
+        <label>방문자 이름<input name="name" placeholder="이름을 모르면 무명" autocomplete="off" required autofocus /></label>
+        <button type="submit">추가</button>
+      </form>
+      <p class="muted">이름만 적습니다. 온 사람을 기억해 두는 것이 목적이라 연락처나 출석 시간은 묻지 않습니다.</p>
+
+      <ul class="member-list">${list}</ul>
+      <p><a href="/?date=${date}">← 입력으로</a></p>
+    </div>`;
+  return c.html(page({ title: '방문 기록', section: 'input', role, body }));
+});
+
+inputRoutes.post('/input/visits', async (c) => {
+  const body = await c.req.parseBody();
+  const date = resolveDate(String(body.date));
+  const name = String(body.name ?? '').trim();
+  if (name) addVisit(date, name);
+  return c.redirect(`/input/visits?date=${date}`);
+});
+
+inputRoutes.post('/input/visits/remove', async (c) => {
+  const body = await c.req.parseBody();
+  const date = resolveDate(String(body.date));
+  const id = Number(body.id);
+  if (id) removeVisit(id);
+  return c.redirect(`/input/visits?date=${date}`);
 });
 
 // ---- fragment helpers ----
