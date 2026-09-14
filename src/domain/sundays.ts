@@ -46,6 +46,13 @@ export function sundaysInRange(fromDateISO: string, toDateISO: string): string[]
   return out;
 }
 
+// The Sunday one week before the given Sunday.
+export function previousSunday(sundayISO: string): string {
+  const d = fromISO(sundayISO);
+  d.setDate(d.getDate() - 7);
+  return toISO(d);
+}
+
 export function isSunday(iso: string): boolean {
   return fromISO(iso).getDay() === 0;
 }

@@ -7,6 +7,7 @@ import { createMember, deleteAllMembers, listMembers, listSoks } from './members
 import { attendanceInRange, getStatus, mark } from './attendance.js';
 import {
   addSession,
+  allSessions,
   countSessions,
   getProfile,
   listSessions,
@@ -188,6 +189,22 @@ test('그 주일의 모임 참여자만 돌려준다', () => {
   assert.deepEqual([...sessionsOn(D1)], [a]);
   assert.deepEqual([...sessionsOn(D2)].sort(), [a, b].sort());
   assert.deepEqual([...sessionCounts()].sort(), [[a, 2], [b, 1]].sort());
+});
+
+test('출석부가 읽는 회차는 승격한 사람 것까지 날짜순이다', () => {
+  const a = registerNewFamily({ name: '정새봄', birth_year: null }, {});
+  const b = registerNewFamily({ name: '한여울', birth_year: null }, {});
+  addSession(a, D2);
+  addSession(b, D1);
+  promote(a);
+
+  assert.deepEqual(
+    allSessions().map((s) => [s.member_id, s.meeting_date]),
+    [
+      [b, D1],
+      [a, D2],
+    ],
+  );
 });
 
 // ---- helpers ----
