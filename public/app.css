@@ -87,6 +87,10 @@ a.count-pill.active { background: var(--accent); color: #fff; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .btn-row button { width: auto; flex: 1 1 auto; margin-top: 0; }
 
+/* 새가족 모임 체크 — 주일 현장에서 폰으로 누르므로 손가락 크기로 둔다 */
+.nf-check { display: flex; align-items: center; gap: 10px; margin: 0; color: inherit; font-size: 1rem; }
+.nf-check input[type='checkbox'] { width: 22px; height: 22px; flex: none; margin: 0; padding: 0; }
+
 /* visitor promote form */
 .visitor-row { flex-direction: column; align-items: stretch; }
 .promote-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
