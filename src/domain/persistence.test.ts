@@ -5,7 +5,16 @@ import { useDb } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { createMember, deleteAllMembers, listMembers, listSoks } from './members.js';
 import { attendanceInRange, getStatus, mark } from './attendance.js';
-import { addSession, countSessions, getProfile, listSessions, registerNewFamily } from './newfamily.js';
+import {
+  addSession,
+  countSessions,
+  getProfile,
+  listSessions,
+  promoteToBeliever,
+  registerNewFamily,
+  sessionCounts,
+  sessionsOn,
+} from './newfamily.js';
 import { addVisit, listVisits, visitsInRange } from './visitlog.js';
 
 // 도메인 함수를 **실제 SQLite** 위에서 검증한다. 가짜가 아니라 진짜 엔진이라
@@ -154,10 +163,36 @@ test('명단 전체 초기화는 등록정보·회차·출석까지 함께 지�
   assert.equal(attendanceInRange([D1]).length, 0);
 });
 
+test('승격은 등록정보와 회차를 지우지 않는다', () => {
+  const id = registerNewFamily({ name: '정새봄', birth_year: 2001 }, { phone: '010-1111-2222' });
+  addSession(id, D1);
+  addSession(id, D2);
+
+  promote(id);
+
+  const m = listMembers().find((x) => x.id === id)!;
+  assert.equal(m.stage, '성도');
+  assert.equal(m.sok, '갑자속');
+  assert.equal(m.role, '속원');
+  assert.equal(getProfile(id)!.phone, '010-1111-2222', '연락처는 담당 사역자의 것이라 남는다');
+  assert.equal(countSessions(id), 2, '회차는 그 사람이 무엇을 했는지의 기록이라 남는다');
+});
+
+test('그 주일의 모임 참여자만 돌려준다', () => {
+  const a = registerNewFamily({ name: '정새봄', birth_year: null }, {});
+  const b = registerNewFamily({ name: '한여울', birth_year: null }, {});
+  addSession(a, D1);
+  addSession(a, D2);
+  addSession(b, D2);
+
+  assert.deepEqual([...sessionsOn(D1)], [a]);
+  assert.deepEqual([...sessionsOn(D2)].sort(), [a, b].sort());
+  assert.deepEqual([...sessionCounts()].sort(), [[a, 2], [b, 1]].sort());
+});
+
 // ---- helpers ----
-// 새가족 → 성도 전환은 아직 도메인 함수가 없어 테스트가 직접 민다(화면 작업의 몫).
 function promote(memberId: number): void {
-  db.prepare("UPDATE member SET stage = '성도', sok = '갑자속', role = '속원' WHERE id = ?").run(memberId);
+  promoteToBeliever(memberId, '갑자속', '속원');
 }
 
 // 스냅샷 칸은 도메인이 읽지 않으므로(인쇄 경로의 몫) 여기서 직접 확인한다.

@@ -1,5 +1,5 @@
 import { getDb } from '../db/index.js';
-import { createMember } from './members.js';
+import { createMember, type Role } from './members.js';
 
 // 새가족 등록정보와 회차. 둘 다 member(stage='새가족')에 매달린다.
 // 근거: context/wayfinder/tickets/12-방문-새가족-등록-경로-통합.md
@@ -103,4 +103,32 @@ export function removeSession(memberId: number, meetingDate: string): void {
     memberId,
     meetingDate,
   );
+}
+
+export function sessionsOn(meetingDate: string): Set<number> {
+  const rows = getDb()
+    .prepare('SELECT member_id FROM newfamily_session WHERE meeting_date = ?')
+    .all(meetingDate) as { member_id: number }[];
+  return new Set(rows.map((r) => r.member_id));
+}
+
+// 목록 화면이 새가족마다 한 번씩 세지 않도록 한 번에 읽는다.
+export function sessionCounts(): Map<number, number> {
+  const rows = getDb()
+    .prepare('SELECT member_id, COUNT(*) AS n FROM newfamily_session GROUP BY member_id')
+    .all() as { member_id: number; n: number }[];
+  return new Map(rows.map((r) => [r.member_id, r.n]));
+}
+
+// ---- 승격 ----
+// 과정을 마친 새가족이 정식 성도가 되어 속을 배정받는다. 이 방향뿐이며 되돌리는
+// 경로는 두지 않는다.
+//
+// **등록정보와 회차는 지우지 않는다.** 회차는 그 사람이 언제 무엇을 했는지의 기록이고,
+// 등록정보는 새가족 담당 사역자의 연락처다. 과거 지면도 함께 지켜진다 —
+// attendance 는 당시 신분을 스냅샷으로 들고 있어 승격이 소급하지 않는다.
+export function promoteToBeliever(memberId: number, sok: string, role: Role): void {
+  getDb()
+    .prepare(`UPDATE member SET stage = '성도', sok = ?, role = ? WHERE id = ?`)
+    .run(sok, role, memberId);
 }
