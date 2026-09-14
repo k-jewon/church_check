@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { html, page, raw, type Raw } from '../views/layout.js';
+import { alertScript, html, page, raw, type Raw } from '../views/layout.js';
 import { formatBirthYear, getMember, listMembers, type Member } from '../domain/members.js';
 import {
   isStatus,
@@ -16,7 +16,19 @@ import {
   type Status,
 } from '../domain/attendance.js';
 import { currentSunday, isSunday, recentSundays } from '../domain/sundays.js';
-import { addSession, countSessions, removeSession, sessionsOn } from '../domain/newfamily.js';
+import {
+  addSession,
+  countSessions,
+  registerNewFamily,
+  removeSession,
+  sessionsOn,
+} from '../domain/newfamily.js';
+import {
+  parseProfileForm,
+  profileForm,
+  profileValues,
+  type ProfileFormValues,
+} from '../views/newfamily-form.js';
 import { addVisit, listVisits, removeVisit } from '../domain/visitlog.js';
 import { currentRole } from '../auth/middleware.js';
 
@@ -71,6 +83,7 @@ inputRoutes.get('/', async (c) => {
 
       <p><a href="/input/status?date=${date}">오늘 입력 현황 보기 →</a></p>
       <p><a href="/input/visits?date=${date}">방문 기록 →</a></p>
+      <p><a href="/input/newfamily/new?date=${date}">새가족 등록 →</a></p>
     </div>
     ${newFamilyCard(date)}`;
   return c.html(page({ title: '출석 입력', section: 'input', role, body }));
@@ -347,6 +360,46 @@ inputRoutes.post('/input/visits/remove', async (c) => {
   const id = Number(body.id);
   if (id) removeVisit(id);
   return c.redirect(`/input/visits?date=${date}`);
+});
+
+// ---- 새가족 등록 ----
+// 새가족은 주일 출석 체크 도중에 생긴다(소유자, 2026-09-14). 그래서 등록은 현장에
+// 있고, **목록은 여기 없다** — 방금 만난 사람에게 물어 받아 적는 것과 남의
+// 개인정보를 목록으로 훑는 것은 다른 일이다. 열람은 `/admin/newfamily` 뿐이다.
+inputRoutes.get('/input/newfamily/new', async (c) => {
+  const role = await currentRole(c);
+  return c.html(newFamilyFormPage(role, resolveDate(c.req.query('date'))));
+});
+
+function newFamilyFormPage(
+  role: 'input' | 'admin' | null,
+  date: string,
+  opts?: { values?: ProfileFormValues; alert?: string },
+) {
+  const body = html`
+    <div class="card">
+      <h1>새가족 등록</h1>
+      <p class="muted">등록하면 출석 체크 대상이 되고, 아래 <strong>새가족 모임</strong> 카드에 회차 칸이 생깁니다.</p>
+      ${profileForm(`/input/newfamily/new?date=${date}`, opts?.values)}
+      <p><a href="/?date=${date}">← 입력으로</a></p>
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '새가족 등록', section: 'input', role, body });
+}
+
+inputRoutes.post('/input/newfamily/new', async (c) => {
+  const role = await currentRole(c);
+  const date = resolveDate(c.req.query('date'));
+  const body = await c.req.parseBody();
+  const parsed = parseProfileForm(body);
+  if ('error' in parsed) {
+    return c.html(
+      newFamilyFormPage(role, date, { values: profileValues(body), alert: parsed.error }),
+      400,
+    );
+  }
+  registerNewFamily(parsed.member, parsed.profile);
+  return c.redirect(`/?date=${date}`);
 });
 
 // ---- fragment helpers ----

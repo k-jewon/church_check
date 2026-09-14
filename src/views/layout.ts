@@ -32,6 +32,14 @@ export function html(strings: TemplateStringsArray, ...values: unknown[]): Raw {
   return new Raw(out);
 }
 
+// 거부 사유를 페이지를 갈아 끼우지 않고 그 자리에서 알린다. 빈 메시지면 아무것도
+// 그리지 않으므로 호출처가 분기할 필요가 없다.
+export function alertScript(message?: string): Raw {
+  if (!message) return raw('');
+  const literal = JSON.stringify(message).replace(/</g, '\u003c');
+  return raw(`<script>alert(${literal});</script>`);
+}
+
 // 화면이 속한 기능 영역. 네비 색·배지·메뉴 구성을 결정한다.
 type Section = 'admin' | 'input';
 
