@@ -2,7 +2,7 @@ import { listMembers, roleRank, SOLDIER_SOK, type Member, type Role, type Stage 
 import { attendanceInRange, isAttended, type RangeRow, type Status } from '../domain/attendance.js';
 import { visitsInRange, type Visit } from '../domain/visitlog.js';
 import { allSessions, type SessionRow } from '../domain/newfamily.js';
-import { previousSunday, sundaysInRange } from '../domain/sundays.js';
+import { sundaysInRange } from '../domain/sundays.js';
 
 // PDF에서 별도 섹션으로 분리된다. 새가족은 속이 아니라 신분이므로 속 이름이 아니라 섹션 이름이다.
 export const NEW_FAMILY = '새가족';
@@ -93,13 +93,11 @@ function leaderKey(members: GridMember[]): { year: number; name: string } {
 // Only wiring lives here; the model itself is composed by the pure function below.
 export function buildGrid(fromISO: string, toISO: string): GridData {
   const dates = sundaysInRange(fromISO, toISO);
-  // 방문 칸은 격자보다 한 주 앞에서 시작한다 — 원본의 "근 5주간 일자"(G18).
-  const visitDates = dates.length ? [previousSunday(dates[0]!), ...dates] : [];
   return composeGrid(
     dates,
     listMembers({ activeOnly: true }),
     attendanceInRange(dates),
-    visitsInRange(visitDates),
+    visitsInRange(dates),
     allSessions(),
   );
 }
@@ -192,9 +190,11 @@ export function composeGrid(
       return ka.year - kb.year || ka.name.localeCompare(kb.name, 'ko');
     });
 
-  // ---- 방문 칸: visit_log 를 날짜별로. 방문이 없던 주일은 줄을 두지 않는다(G18) ----
+  // ---- 방문 칸: visit_log 를 날짜별로 ----
+  // 출석 추적과 같은 주일만 싣고, 방문이 없던 주일은 줄을 두지 않는다(G18, 소유자 확정 2026-09-16).
   const visitMap = new Map<string, string[]>();
   for (const v of visitRows) {
+    if (!inRange.has(v.visit_date)) continue;
     const names = visitMap.get(v.visit_date) ?? [];
     names.push(v.name);
     visitMap.set(v.visit_date, names);
