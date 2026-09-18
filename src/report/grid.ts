@@ -52,7 +52,7 @@ export interface SummaryRow {
   total: number; // 청년 + 새가족+기타
 }
 
-// 비고 — 오래 결석한 사람. 속 격자에서 빼지 않고 따로 한 번 더 적는다.
+// 비고 — 오래 결석해 격자에서 빠진 사람 중 아직 6개월이 지나지 않은 사람.
 export interface Remarks {
   believers: string[]; // 격자 순서
   newFamily: { name: string; inviter: string | null }[];
@@ -192,10 +192,13 @@ export function composeGrid(
     }
   }
 
-  // 섹션 안의 순서: 직분 → 생년 → 이름. 옛 자리에서 온 사람이 섞이므로 입력 순서에 기대지 않는다.
+  // 섹션 안의 순서. 새가족은 첫 회차 날짜순이고 회차가 없으면 뒤에 선다(소유자 확정 2026-09-18).
+  // 그 밖은 직분 → 생년 → 이름이다. 옛 자리에서 온 사람이 섞이므로 입력 순서에 기대지 않는다.
+  const firstSession = (m: GridMember) => m.sessions[0] ?? '9999-12-31';
   for (const e of sokMap.values()) {
     e.members.sort(
       (a, b) =>
+        (e.kind === 'newfamily' ? firstSession(a).localeCompare(firstSession(b)) : 0) ||
         roleRank(a.role) - roleRank(b.role) ||
         (a.birth_year ?? Infinity) - (b.birth_year ?? Infinity) ||
         a.name.localeCompare(b.name, 'ko'),
@@ -213,27 +216,34 @@ export function composeGrid(
       return ka.year - kb.year || ka.name.localeCompare(kb.name, 'ko');
     });
 
-  // ---- 비고: 기준일(마지막 주일)에 결석이 3개월 이상 6개월 미만인 사람 ----
-  // 격자 순서대로 적되 성도를 먼저, 새가족을 뒤에 둔다. 군인은 휴가가 아니면 올 수 없어 뺀다.
+  // ---- 오래 결석한 사람: 기준일(마지막 주일)에 마지막 출석에서 3개월이 지났다 ----
+  // 격자에서 빠지고, 6개월이 지나기 전까지만 비고에 적는다. 군인은 휴가가 아니면
+  // 올 수 없으므로 이 규칙에서 제외한다(소유자 확정 2026-09-18).
+  const longAbsent = new Set<number>();
   const due = new Set<number>();
   for (const s of lastSeen) {
-    if (
-      addMonths(s.last_seen, REMARK_FROM_MONTHS) <= lastDate &&
-      addMonths(s.last_seen, REMARK_UNTIL_MONTHS) > lastDate
-    ) {
-      due.add(s.member_id);
-    }
+    const m = memberById.get(s.member_id);
+    if (!m || m.sok === SOLDIER) continue;
+    if (addMonths(s.last_seen, REMARK_FROM_MONTHS) > lastDate) continue;
+    longAbsent.add(s.member_id);
+    if (addMonths(s.last_seen, REMARK_UNTIL_MONTHS) > lastDate) due.add(s.member_id);
   }
+
+  // 비고는 격자에 놓였을 순서대로 적되 성도를 먼저, 새가족을 뒤에 둔다.
   const remarks: Remarks = { believers: [], newFamily: [] };
   for (const sok of soks) {
     for (const gm of sok.members) {
       if (!due.delete(gm.id)) continue; // 두 자리에 선 사람도 한 번만 적는다
       const m = memberById.get(gm.id)!;
-      if (m.sok === SOLDIER) continue;
       if (m.stage === NEW_FAMILY) remarks.newFamily.push({ name: m.name, inviter: inviters.get(m.id) ?? null });
       else remarks.believers.push(m.name);
     }
   }
+
+  // 그다음에 격자에서 뺀다. 모두 빠진 섹션은 그리지 않는다.
+  const drawn: GridSok[] = soks
+    .map((s) => ({ ...s, members: s.members.filter((gm) => !longAbsent.has(gm.id)) }))
+    .filter((s) => s.members.length > 0);
 
   // ---- 방문 칸: visit_log 를 날짜별로 ----
   // 출석 추적과 같은 주일만 싣고, 방문이 없던 주일은 줄을 두지 않는다(G18, 소유자 확정 2026-09-16).
@@ -263,5 +273,5 @@ export function composeGrid(
     return { date: d, youth, newFamilyEtc, total: youth + newFamilyEtc };
   });
 
-  return { dates, soks, visits, summary, remarks, memberCount: members.length };
+  return { dates, soks: drawn, visits, summary, remarks, memberCount: members.length };
 }
