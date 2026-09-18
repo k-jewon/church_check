@@ -254,6 +254,17 @@ test('출력 기간 뒤의 회차는 지면에 오르지 않는다', () => {
   assert.deepEqual(grid.soks[0]!.members[0]!.sessions, [D[0]]);
 });
 
+test('새가족 행은 인도자를 들고, 성도 행은 들지 않는다', () => {
+  const s = 성도('김갑자', '갑자속', '속장', 1985);
+  const nf = 새가족('정새봄');
+  const grid = composeGrid(D, [s, nf], [], [], [], [], new Map([[nf.id, '김갑자'], [s.id, '누군가']]));
+
+  assert.deepEqual(
+    grid.soks.map((sok) => sok.members.map((m) => [m.name, m.inviter])),
+    [[['김갑자', null]], [['정새봄', '김갑자']]],
+  );
+});
+
 test('새가족 행은 첫 회차 날짜순이고 회차가 없는 사람은 뒤에 선다', () => {
   const 가 = 새가족('가나다');
   const 나 = 새가족('나다라');

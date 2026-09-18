@@ -27,6 +27,13 @@ function nameCell(name: string, birth: number | null): string {
   return by ? `${esc(name)}(${esc(by)})` : esc(name);
 }
 
+// 새가족은 생년 대신 인도자 이름의 뒤 두 글자를 첨자로 단다(원본 양식 — 비고에는 전체 이름을 적는다).
+function newFamilyNameCell(name: string, inviter: string | null): string {
+  if (!inviter) return esc(name);
+  const short = inviter.length > 2 ? inviter.slice(-2) : inviter;
+  return `${esc(name)}<span class="inviter">(${esc(short)})</span>`;
+}
+
 export interface ReportMeta {
   title: string;
   from: string;
@@ -56,7 +63,8 @@ function sokTable(sok: GridSok, dateHeaders: string, maxRows: number, emptyCells
           }).join('')
         : m.statuses.map((s) => `<td>${s ? SYMBOL[s] : ''}</td>`).join('');
       const nameCls = m.isLeader ? 'name leader' : 'name';
-      return `<tr><td class="${nameCls}">${nameCell(m.name, m.birth_year)}</td>${cells}</tr>`;
+      const nameHtml = newfamily ? newFamilyNameCell(m.name, m.inviter) : nameCell(m.name, m.birth_year);
+      return `<tr><td class="${nameCls}">${nameHtml}</td>${cells}</tr>`;
     })
     .join('');
   const padCount = Math.max(0, maxRows - sok.members.length);
@@ -124,6 +132,7 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   table.sok th.name, table.sok td.name { text-align: left; max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
   table.sok th.name { font-weight: 700; background: #e0e0e0; }
   table.sok td.name.leader { background: #e0e0e0; }
+  table.sok td.name .inviter { font-size: 0.75em; }
   .date-col { font-size: 0.8em; }
   .footer-sections { display: flex; gap: 6px; margin-top: 4px; break-inside: avoid; }
   .visits { flex: 2; border: 1px solid #999; }

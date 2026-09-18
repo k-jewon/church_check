@@ -31,6 +31,7 @@ export interface GridMember {
   role: Role | null; // 새가족은 직분이 없고, 옛 자리에서는 그때의 직분을 모른다
   statuses: (Status | null)[]; // aligned to dates — 이 자리에 있던 주만 채운다
   sessions: string[]; // 회차 칸에 적을 모임 날짜(최대 SESSION_COLS). 새가족 섹션에서만 쓴다
+  inviter: string | null; // 인도자 — 새가족 섹션에서 이름 옆 첨자로 단다
   isLeader: boolean; // 속장·부속장 → 회색 강조
 }
 
@@ -184,6 +185,7 @@ export function composeGrid(
         role,
         statuses: dates.map((d) => marks.get(d) ?? null),
         sessions: kind === 'newfamily' ? sessionCells(sessions) : [],
+        inviter: kind === 'newfamily' ? (inviters.get(m.id) ?? null) : null,
         isLeader: role !== null && role !== '속원',
       };
       const entry = sokMap.get(section) ?? { kind, members: [] };
