@@ -27,11 +27,15 @@ function nameCell(name: string, birth: number | null): string {
   return by ? `${esc(name)}(${esc(by)})` : esc(name);
 }
 
-// 새가족은 생년 대신 인도자 이름의 뒤 두 글자를 첨자로 단다(원본 양식 — 비고에는 전체 이름을 적는다).
+// 인도자는 지면 어디서나 이름의 뒤 두 글자로 적는다(소유자 확정 2026-09-18).
+function shortInviter(inviter: string): string {
+  return inviter.length > 2 ? inviter.slice(-2) : inviter;
+}
+
+// 새가족은 생년 대신 인도자를 첨자로 단다(원본 양식).
 function newFamilyNameCell(name: string, inviter: string | null): string {
   if (!inviter) return esc(name);
-  const short = inviter.length > 2 ? inviter.slice(-2) : inviter;
-  return `${esc(name)}<span class="inviter">(${esc(short)})</span>`;
+  return `${esc(name)}<span class="inviter">(${esc(shortInviter(inviter))})</span>`;
 }
 
 export interface ReportMeta {
@@ -112,7 +116,9 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   const sumTotal = grid.summary.map((s) => `<td>${s.total}</td>`).join('');
 
   // 비고: `성도, 성도 / 새가족(인도자), 새가족`
-  const nfRemarks = grid.remarks.newFamily.map((r) => (r.inviter ? `${r.name}(${r.inviter})` : r.name));
+  const nfRemarks = grid.remarks.newFamily.map((r) =>
+    r.inviter ? `${r.name}(${shortInviter(r.inviter)})` : r.name,
+  );
   const remarkText = [grid.remarks.believers.join(', '), nfRemarks.join(', ')].filter(Boolean).join(' / ');
 
   return `<!doctype html>
