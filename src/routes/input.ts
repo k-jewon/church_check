@@ -7,6 +7,7 @@ import {
   listUnmarked,
   marksForDate,
   mark,
+  markFirst,
   searchUnmarked,
   STATUSES,
   statusCounts,
@@ -120,7 +121,7 @@ inputRoutes.post('/input/mark', async (c) => {
   const date = resolveDate(String(body.date));
   const status = String(body.status);
   if (!memberId || !isStatus(status)) return c.text('bad request', 400);
-  mark(memberId, date, status);
+  markFirst(memberId, date, status); // 다른 폰이 먼저 찍었으면 그 값이 칩으로 돌아간다
   const m = marksForDate(date).find((x) => x.id === memberId);
   if (!m) return c.text('', 200);
   return c.html(fragment(chip(m, m.status, date)));

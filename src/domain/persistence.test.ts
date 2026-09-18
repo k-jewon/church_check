@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { useDb } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { createMember, deleteAllMembers, listMembers, listSoks } from './members.js';
-import { attendanceInRange, getStatus, lastSeenUpTo, mark } from './attendance.js';
+import { attendanceInRange, getStatus, lastSeenUpTo, mark, markFirst } from './attendance.js';
 import {
   addSession,
   allSessions,
@@ -77,6 +77,22 @@ test('같은 주일을 다시 찍으면 상태만 바뀌고 스냅샷은 그대�
 
   assert.equal(getStatus(id, D1), 'praise');
   assert.deepEqual(snapshotOf(id, D1), { stage_at: '새가족', sok_at: null });
+});
+
+test('현장 입력은 먼저 찍힌 출석을 덮지 않는다', () => {
+  const id = 성도('김갑자', '갑자속', '속장', 1985);
+  markFirst(id, D1, 'before');
+  markFirst(id, D1, 'after'); // 다른 폰에서 화면이 갱신되기 전에 또 눌렀다
+
+  assert.equal(getStatus(id, D1), 'before');
+});
+
+test('현장 입력이 먼저 찍혀도 현황 화면의 정정은 덮어쓴다', () => {
+  const id = 성도('김갑자', '갑자속', '속장', 1985);
+  markFirst(id, D1, 'before');
+  mark(id, D1, 'after');
+
+  assert.equal(getStatus(id, D1), 'after');
 });
 
 test('새가족 등록은 사람과 등록정보를 한 번에 만든다', () => {
