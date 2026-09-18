@@ -35,7 +35,7 @@ export function profileValues(body: Record<string, unknown>): ProfileFormValues 
 
 const GENDERS = ['남', '여'];
 
-export function profileForm(action: string, v?: ProfileFormValues): Raw {
+export function profileForm(action: string, v?: ProfileFormValues, submit = '등록'): Raw {
   return html`
     <form method="post" action="${action}">
       <label>이름<input name="name" value="${v?.name ?? ''}" required /></label>
@@ -55,7 +55,7 @@ export function profileForm(action: string, v?: ProfileFormValues): Raw {
         </select>
       </label>
       <label>방문경로 상세 (<code>기타</code>일 때만 저장됩니다)<input name="route_note" value="${v?.route_note ?? ''}" /></label>
-      <button type="submit">등록</button>
+      <button type="submit">${submit}</button>
     </form>`;
 }
 

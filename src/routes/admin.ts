@@ -24,13 +24,16 @@ import {
   type Member,
 } from '../domain/members.js';
 import {
+  eraseProfile,
   getProfile,
   isRoute,
   promoteToBeliever,
   registerNewFamily,
   ROUTES,
   sessionCounts,
+  updateNewFamily,
   type NewProfile,
+  type Profile,
 } from '../domain/newfamily.js';
 import {
   parseProfileForm,
@@ -151,6 +154,9 @@ function editPage(m: Member, opts?: { values?: FormValues; alert?: string }) {
         soks: sokOptions(),
         values: opts?.values,
       })}
+      ${getProfile(m.id)
+        ? html`<p><a href="/admin/newfamily/${m.id}/edit">새가족 때 받은 등록정보 보기·수정</a></p>`
+        : raw('')}
     </div>
     ${alertScript(opts?.alert)}`;
   return page({ title: '성도 수정', section: 'admin', body });
@@ -206,6 +212,7 @@ function newFamilyPage(opts?: { values?: ProfileFormValues; alert?: string }) {
                   ${detail ? html` <span class="muted">${detail}</span>` : raw('')}
                 </span>
                 <span class="row-actions">
+                  <a href="/admin/newfamily/${m.id}/edit">수정</a>
                   <a href="/admin/newfamily/${m.id}/promote">성도로 승격</a>
                 </span>
               </li>`;
@@ -297,6 +304,73 @@ adminRoutes.post('/newfamily/:id/promote', async (c) => {
 
   promoteToBeliever(id, assigned.sok, role);
   return c.redirect('/admin/members');
+});
+
+// 등록정보 수정·삭제 (G24) — 승격한 성도의 등록정보도 여기서 다룬다.
+// 삭제는 인도자만 남기고 비운다. 사람은 지우지 않는다(출석이 함께 사라져 과거 지면이 바뀐다).
+// 근거: context/wayfinder/tickets/13-보관-개인정보-범위.md 3번
+function profileTarget(id: number): { m: Member; p: Profile | undefined } | { error: string } {
+  const m = getMember(id);
+  if (!m) return { error: '사람을 찾을 수 없습니다.' };
+  const p = getProfile(id);
+  if (m.stage !== '새가족' && !p) return { error: '등록정보가 없는 성도입니다.' };
+  return { m, p };
+}
+
+function profileEditPage(m: Member, p: Profile | undefined, opts?: { values?: ProfileFormValues; alert?: string }) {
+  const values: ProfileFormValues = opts?.values ?? {
+    name: m.name,
+    birth_year: m.birth_year === null ? '' : String(m.birth_year),
+    phone: p?.phone ?? '',
+    gender: p?.gender ?? '',
+    inviter: p?.inviter ?? '',
+    route: p?.route ?? '',
+    route_note: p?.route_note ?? '',
+  };
+  const back = m.stage === '새가족' ? '/admin/newfamily' : '/admin/members';
+  const body = html`
+    <div class="card">
+      <h1>등록정보 수정</h1>
+      ${m.stage === '성도' ? html`<p class="muted">정식 성도(${m.sok} · ${m.role})입니다. 속·직분은 명단 관리에서 고칩니다.</p>` : raw('')}
+      ${profileForm(`/admin/newfamily/${m.id}/edit`, values, '저장')}
+    </div>
+    <div class="card">
+      <h2>등록정보 삭제</h2>
+      <p>연락처·성별·방문경로를 지웁니다. <strong>이름·생년·인도자·출석·회차는 남습니다</strong> — 출석부 지면이 읽는 값이기 때문입니다.</p>
+      <form method="post" action="/admin/newfamily/${m.id}/erase" onsubmit="return confirm('연락처·성별·방문경로를 지웁니다. 되돌릴 수 없습니다. 계속합니까?');">
+        <button type="submit">등록정보 삭제</button>
+      </form>
+      <p><a href="${back}">← 돌아가기</a></p>
+    </div>
+    ${alertScript(opts?.alert)}`;
+  return page({ title: '등록정보 수정', section: 'admin', body });
+}
+
+adminRoutes.get('/newfamily/:id/edit', (c) => {
+  const t = profileTarget(Number(c.req.param('id')));
+  if ('error' in t) return c.html(errorPage(t.error, '/admin/newfamily'), 404);
+  return c.html(profileEditPage(t.m, t.p));
+});
+
+adminRoutes.post('/newfamily/:id/edit', async (c) => {
+  const id = Number(c.req.param('id'));
+  const t = profileTarget(id);
+  if ('error' in t) return c.html(errorPage(t.error, '/admin/newfamily'), 404);
+  const body = await c.req.parseBody();
+  const parsed = parseProfileForm(body);
+  if ('error' in parsed) {
+    return c.html(profileEditPage(t.m, t.p, { values: profileValues(body), alert: parsed.error }), 400);
+  }
+  updateNewFamily(id, parsed.member, parsed.profile);
+  return c.redirect(t.m.stage === '새가족' ? '/admin/newfamily' : '/admin/members');
+});
+
+adminRoutes.post('/newfamily/:id/erase', (c) => {
+  const id = Number(c.req.param('id'));
+  const t = profileTarget(id);
+  if ('error' in t) return c.html(errorPage(t.error, '/admin/newfamily'), 404);
+  eraseProfile(id);
+  return c.redirect(`/admin/newfamily/${id}/edit`);
 });
 
 // 4회를 채우고도 속을 배정받지 못하면 계속 `4주차`로 보인다 — 관계자가 배정되지
