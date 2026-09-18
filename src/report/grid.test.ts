@@ -254,6 +254,16 @@ test('출력 기간 뒤의 회차는 지면에 오르지 않는다', () => {
   assert.deepEqual(grid.soks[0]!.members[0]!.sessions, [D[0]]);
 });
 
+test('새가족 행은 첫 회차 날짜순이고 회차가 없는 사람은 뒤에 선다', () => {
+  const 가 = 새가족('가나다');
+  const 나 = 새가족('나다라');
+  const 다 = 새가족('다라마');
+  const sessions = [회차(다, '2026-07-12'), 회차(가, D[1]), 회차(다, D[0])];
+  const grid = composeGrid(D, [가, 나, 다], [], [], sessions);
+
+  assert.deepEqual(grid.soks[0]!.members.map((m) => m.name), ['다라마', '가나다', '나다라']);
+});
+
 test('기간 안에 모임을 한 사람은 지금 성도여도 새가족 칸에 있다', () => {
   const leader = 성도('김갑자', '갑자속', '속장', 1985);
   const 승격 = 성도('정새봄', '갑자속', '속원', 2001);
@@ -281,41 +291,55 @@ test('방문 칸은 격자와 같은 주일 중 방문이 있었던 날만 적�
 // ---------------------------------------------------------------------------
 // 비고 — 기준일(출력 기간의 마지막 주일)에 마지막 출석에서 3개월 이상 6개월 미만 지난 사람.
 // 마지막 출석은 본당을 포함하고 기록이 없으면 등록일이다(그 계산은 도메인 쪽).
-// 속 격자에서는 빼지 않고, 군인은 제외한다(소유자 확정 2026-09-18).
+// 3개월이 지나면 속·새가족 격자에서 빠지고, 6개월까지만 비고에 남는다.
+// 군인은 이 규칙에서 제외한다(소유자 확정 2026-09-18).
 // D 의 마지막 주일은 2026-08-16 이다.
 // ---------------------------------------------------------------------------
 const 마지막 = (m: Member, date: string): LastSeen => ({ member_id: m.id, last_seen: date });
+const idsIn = (grid: ReturnType<typeof composeGrid>) => grid.soks.flatMap((s) => s.members.map((m) => m.id));
 
-test('비고는 3개월 이상 6개월 미만 결석한 사람이고 격자에는 그대로 남는다', () => {
+test('3개월 이상 6개월 미만 결석한 사람은 격자에서 빠지고 비고에 오른다', () => {
   const a = 성도('김갑자', '갑자속', '속장', 1985);
   const b = 성도('이가온', '갑자속', '속원', 1990);
   const grid = composeGrid(D, [a, b], [], [], [], [마지막(a, D[0]), 마지막(b, '2026-05-10')]);
 
   assert.deepEqual(grid.remarks, { believers: ['이가온'], newFamily: [] });
-  assert.equal(grid.soks[0]!.members.length, 2, '비고에 올라도 속 행은 그대로다');
+  assert.deepEqual(idsIn(grid), [a.id]);
 });
 
-test('3개월은 달력으로 센다 — 하루라도 모자라면 아직 비고가 아니다', () => {
+test('3개월은 달력으로 센다 — 하루라도 모자라면 아직 격자에 있다', () => {
   const a = 성도('김갑자', '갑자속', '속장', 1985);
   const b = 성도('이가온', '갑자속', '속원', 1990);
   const grid = composeGrid(D, [a, b], [], [], [], [마지막(a, '2026-05-16'), 마지막(b, '2026-05-17')]);
 
   assert.deepEqual(grid.remarks.believers, ['김갑자']);
+  assert.deepEqual(idsIn(grid), [b.id]);
 });
 
-test('6개월이 지나면 비고에서 빠지고 격자에는 남는다', () => {
+test('6개월이 지나면 격자에도 비고에도 없다', () => {
   const a = 성도('김갑자', '갑자속', '속장', 1985);
-  const grid = composeGrid(D, [a], [], [], [], [마지막(a, '2026-02-16')]);
+  const b = 성도('이가온', '갑자속', '속원', 1990);
+  const grid = composeGrid(D, [a, b], [], [], [], [마지막(a, D[0]), 마지막(b, '2026-02-16')]);
 
   assert.deepEqual(grid.remarks.believers, []);
-  assert.equal(grid.soks[0]!.members.length, 1);
+  assert.deepEqual(idsIn(grid), [a.id]);
 });
 
-test('군인은 오래 결석해도 비고에 오르지 않는다', () => {
+test('오래 결석한 새가족도 새가족 칸에서 빠지고, 빈 섹션은 그리지 않는다', () => {
+  const a = 성도('김갑자', '갑자속', '속장', 1985);
+  const nf = 새가족('정새봄');
+  const grid = composeGrid(D, [a, nf], [], [], [], [마지막(a, D[0]), 마지막(nf, '2026-04-12')]);
+
+  assert.deepEqual(grid.soks.map((s) => s.name), ['갑자속']);
+  assert.deepEqual(grid.remarks.newFamily, [{ name: '정새봄', inviter: null }]);
+});
+
+test('군인은 오래 결석해도 군인 칸에 남고 비고에 오르지 않는다', () => {
   const soldier = 성도('최한결', '군인', '속원', 1999);
   const grid = composeGrid(D, [soldier], [], [], [], [마지막(soldier, '2026-04-12')]);
 
   assert.deepEqual(grid.remarks, { believers: [], newFamily: [] });
+  assert.deepEqual(idsIn(grid), [soldier.id]);
 });
 
 test('비고는 성도를 격자 순서대로 먼저, 새가족을 뒤에 적고 새가족은 인도자를 든다', () => {
