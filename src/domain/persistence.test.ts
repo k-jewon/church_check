@@ -4,12 +4,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { useDb } from '../db/index.js';
 import { migrate } from '../db/migrate.js';
 import { createMember, deleteAllMembers, listMembers, listSoks } from './members.js';
-import { attendanceInRange, getStatus, mark } from './attendance.js';
+import { attendanceInRange, getStatus, lastSeenUpTo, mark } from './attendance.js';
 import {
   addSession,
   allSessions,
   countSessions,
   getProfile,
+  inviterById,
   listSessions,
   promoteToBeliever,
   registerNewFamily,
@@ -205,6 +206,25 @@ test('출석부가 읽는 회차는 승격한 사람 것까지 날짜순이다',
       [a, D2],
     ],
   );
+});
+
+test('비고가 읽는 마지막 출석은 본당을 포함하고 기준일 뒤를 보지 않으며, 기록이 없으면 등록일이다', () => {
+  const a = 성도('김갑자', '갑자속', '속장', 1985);
+  const b = 성도('이가온', '갑자속', '속원', 1990);
+  mark(a, D1, 'main'); // 본당도 교회에 나온 것이다
+  mark(a, '2026-08-23', 'before'); // 기준일(D2) 뒤
+  db.prepare(`UPDATE member SET created_at = '2026-03-01 10:00:00' WHERE id = ?`).run(b);
+
+  const byId = new Map(lastSeenUpTo(D2).map((r) => [r.member_id, r.last_seen]));
+  assert.equal(byId.get(a), D1);
+  assert.equal(byId.get(b), '2026-03-01');
+});
+
+test('인도자는 적혀 있는 새가족만 돌려준다', () => {
+  const a = registerNewFamily({ name: '정새봄', birth_year: null }, { inviter: '김갑자' });
+  registerNewFamily({ name: '한여울', birth_year: null }, {});
+
+  assert.deepEqual([...inviterById()], [[a, '김갑자']]);
 });
 
 // ---- helpers ----

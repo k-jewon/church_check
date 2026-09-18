@@ -166,6 +166,28 @@ export function attendanceInRange(dates: string[]): RangeRow[] {
     .all(...dates) as unknown as RangeRow[];
 }
 
+export interface LastSeen {
+  member_id: number;
+  last_seen: string; // YYYY-MM-DD
+}
+
+// 출석부 비고가 읽는 마지막 출석. 본당도 교회에 나온 것이므로 센다 — 행이 있으면 무엇이든
+// 왔다는 뜻이다. 기준일 뒤의 행은 보지 않고(다시 뽑아도 같은 지면), 기록이 없으면
+// 명단에 등록된 날부터 센다(소유자 확정 2026-09-18).
+export function lastSeenUpTo(toISO: string): LastSeen[] {
+  return getDb()
+    .prepare(
+      `SELECT m.id AS member_id,
+              COALESCE(
+                (SELECT MAX(a.service_date) FROM attendance a
+                  WHERE a.member_id = m.id AND a.service_date <= ?),
+                date(m.created_at)
+              ) AS last_seen
+       FROM member m WHERE m.active = 1`,
+    )
+    .all(toISO) as unknown as LastSeen[];
+}
+
 function sortRoster<T extends Member>(rows: T[]): T[] {
   return rows.slice().sort(
     (a, b) =>

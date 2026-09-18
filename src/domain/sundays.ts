@@ -46,6 +46,15 @@ export function sundaysInRange(fromDateISO: string, toDateISO: string): string[]
   return out;
 }
 
+// Same day `n` months later, clamped to that month's last day (08-31 + 6 -> 02-28).
+export function addMonths(iso: string, n: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const out = new Date(y, m - 1 + n, 1);
+  const lastDay = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate();
+  out.setDate(Math.min(d, lastDay));
+  return toISO(out);
+}
+
 export function isSunday(iso: string): boolean {
   return fromISO(iso).getDay() === 0;
 }
