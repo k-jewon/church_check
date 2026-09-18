@@ -70,6 +70,42 @@ export function registerNewFamily(
   }
 }
 
+// ---- 수정·삭제 (G24) ----
+// 개인정보를 영구 보관하기로 한 대가다 — 기간이 없으니 틀린 값도 영구이고,
+// "요청하시면 지워 드립니다"라고 말할 수단이 있어야 보관이 받아들여진다.
+// 승격한 성도의 등록정보도 대상이다. 사람(member) 삭제는 두지 않는다 — 출석이
+// 함께 지워져 과거 지면이 바뀐다. 명단에서 내리는 것은 비활성이 맡는다.
+// 근거: context/wayfinder/tickets/13-보관-개인정보-범위.md 3번
+
+// 이름·생년도 여기서 고친다. 새가족은 명단 관리에서 잠겨 있어 달리 고칠 곳이 없다.
+export function updateNewFamily(
+  memberId: number,
+  member: { name: string; birth_year: number | null },
+  profile: NewProfile,
+): void {
+  getDb().exec('BEGIN');
+  try {
+    getDb()
+      .prepare('UPDATE member SET name = ?, birth_year = ? WHERE id = ?')
+      .run(member.name, member.birth_year, memberId);
+    saveProfile(memberId, profile);
+    getDb().exec('COMMIT');
+  } catch (err) {
+    getDb().exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// 인도자는 남긴다 — 출석부의 새가족 첨자와 비고가 읽는 지면의 일부다(소유자 확정).
+export function eraseProfile(memberId: number): void {
+  getDb()
+    .prepare(
+      `UPDATE newfamily_profile SET phone = NULL, gender = NULL, route = NULL, route_note = NULL
+       WHERE member_id = ?`,
+    )
+    .run(memberId);
+}
+
 // ---- 회차 ----
 // 한 줄이 1회차다. 예배 출석이 아니라 예배 후 새가족 모임 참여를 뜻하므로
 // 출석 행에서 유도할 수 없다.

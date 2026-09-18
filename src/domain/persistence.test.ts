@@ -9,6 +9,7 @@ import {
   addSession,
   allSessions,
   countSessions,
+  eraseProfile,
   getProfile,
   inviterById,
   listSessions,
@@ -16,6 +17,7 @@ import {
   registerNewFamily,
   sessionCounts,
   sessionsOn,
+  updateNewFamily,
 } from './newfamily.js';
 import { addVisit, listVisits, visitsInRange } from './visitlog.js';
 
@@ -244,6 +246,71 @@ test('인도자는 적혀 있는 새가족만 돌려준다', () => {
 });
 
 // ---- helpers ----
+// ---- 등록정보 수정·삭제 (G24) ----
+// 근거: context/wayfinder/tickets/13-보관-개인정보-범위.md 3번
+
+test('등록정보 수정은 이름·생년과 등록정보를 함께 고친다', () => {
+  const id = registerNewFamily(
+    { name: '정새봄', birth_year: 2001 },
+    { phone: '010-1111-2222', gender: '여', inviter: '김갑자', route: '기타', route_note: '현수막' },
+  );
+
+  updateNewFamily(id, { name: '정새봄이', birth_year: 2002 }, { phone: '010-3333-4444', route: '전도', route_note: '버려질 값' });
+
+  const m = listMembers().find((x) => x.id === id)!;
+  assert.equal(m.name, '정새봄이');
+  assert.equal(m.birth_year, 2002);
+  assert.equal(m.stage, '새가족', '수정은 신분을 바꾸지 않는다');
+  const p = getProfile(id)!;
+  assert.equal(p.phone, '010-3333-4444');
+  assert.equal(p.gender, null, '비운 칸은 비워진다');
+  assert.equal(p.inviter, null);
+  assert.equal(p.route, '전도');
+  assert.equal(p.route_note, null, '상세는 `기타`일 때만 남는다');
+});
+
+test('승격한 성도의 등록정보도 고칠 수 있고 속·직분은 그대로다', () => {
+  const id = registerNewFamily({ name: '정새봄', birth_year: 2001 }, { phone: '010-1111-2222' });
+  promote(id);
+
+  updateNewFamily(id, { name: '정새봄', birth_year: 2001 }, { phone: '010-9999-0000' });
+
+  const m = listMembers().find((x) => x.id === id)!;
+  assert.equal(m.stage, '성도');
+  assert.equal(m.sok, '갑자속');
+  assert.equal(m.role, '속원');
+  assert.equal(getProfile(id)!.phone, '010-9999-0000');
+});
+
+test('등록정보 삭제는 인도자만 남기고 개인정보를 비운다', () => {
+  const id = registerNewFamily(
+    { name: '정새봄', birth_year: 2001 },
+    { phone: '010-1111-2222', gender: '여', inviter: '김갑자', route: '기타', route_note: '현수막' },
+  );
+
+  eraseProfile(id);
+
+  const p = getProfile(id)!;
+  assert.equal(p.phone, null);
+  assert.equal(p.gender, null);
+  assert.equal(p.route, null);
+  assert.equal(p.route_note, null);
+  assert.equal(p.inviter, '김갑자', '인도자는 출석부 지면의 일부라 남는다');
+  assert.equal(inviterById().get(id), '김갑자');
+});
+
+test('등록정보를 지워도 사람·회차·출석은 남는다', () => {
+  const id = registerNewFamily({ name: '정새봄', birth_year: 2001 }, { phone: '010-1111-2222' });
+  addSession(id, D1);
+  mark(id, D1, 'after');
+
+  eraseProfile(id);
+
+  assert.ok(listMembers().some((x) => x.id === id));
+  assert.equal(countSessions(id), 1);
+  assert.equal(getStatus(id, D1), 'after');
+});
+
 function promote(memberId: number): void {
   promoteToBeliever(memberId, '갑자속', '속원');
 }
