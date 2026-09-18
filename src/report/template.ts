@@ -103,6 +103,10 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   const sumNew = grid.summary.map((s) => `<td>${s.newFamilyEtc}</td>`).join('');
   const sumTotal = grid.summary.map((s) => `<td>${s.total}</td>`).join('');
 
+  // 비고: `성도, 성도 / 새가족(인도자), 새가족`
+  const nfRemarks = grid.remarks.newFamily.map((r) => (r.inviter ? `${r.name}(${r.inviter})` : r.name));
+  const remarkText = [grid.remarks.believers.join(', '), nfRemarks.join(', ')].filter(Boolean).join(' / ');
+
   return `<!doctype html>
 <html lang="ko"><head><meta charset="utf-8" />
 <style>
@@ -123,7 +127,9 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
   .date-col { font-size: 0.8em; }
   .footer-sections { display: flex; gap: 6px; margin-top: 4px; break-inside: avoid; }
   .visits { flex: 2; border: 1px solid #999; }
-  .visits h2, .summary h2 { font-size: 1em; margin: 0; padding: 2px 4px; background: #ece0f0; text-align: center; border-bottom: 1px solid #999; }
+  .remarks { border: 1px solid #999; margin-top: 4px; break-inside: avoid; }
+  .remarks-body { padding: 1px 4px; text-align: center; min-height: 1.3em; }
+  .visits h2, .summary h2, .remarks h2 { font-size: 1em; margin: 0; padding: 2px 4px; background: #ece0f0; text-align: center; border-bottom: 1px solid #999; }
   .visit-row { padding: 1px 4px; }
   .visit-date { font-weight: 700; }
   .summary { flex: 1; }
@@ -154,6 +160,10 @@ export function renderReportHTML(grid: GridData, meta: ReportMeta): string {
         </tbody>
       </table>
     </div>
+  </div>
+  <div class="remarks">
+    <h2>비고</h2>
+    <div class="remarks-body">${esc(remarkText)}</div>
   </div>
   <div class="legend">● 2시 이전 참석 / ○ 2시 이후 참석 / ◉ 찬양 이후 참석 / [본] 본당예배 참석 &nbsp;&nbsp; * 본당 예배는 출석인원에 포함 X</div>
 </body></html>`;

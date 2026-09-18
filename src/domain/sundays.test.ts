@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { currentSunday, recentSundays, sundaysInRange, isSunday } from './sundays.js';
+import { currentSunday, recentSundays, sundaysInRange, isSunday, addMonths } from './sundays.js';
 
 // 2025-08-24, 08-31, 09-07, 09-14 are Sundays (from the sample sheet).
 test('currentSunday: snaps to the week Sunday', () => {
@@ -25,6 +25,12 @@ test('sundaysInRange: inclusive Sundays', () => {
     '2025-09-07',
     '2025-09-14',
   ]);
+});
+
+test('addMonths: calendar months, clamped to month end', () => {
+  assert.equal(addMonths('2026-05-17', 3), '2026-08-17');
+  assert.equal(addMonths('2026-08-31', 6), '2027-02-28');
+  assert.equal(addMonths('2025-11-30', 3), '2026-02-28');
 });
 
 test('isSunday', () => {

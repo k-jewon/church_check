@@ -124,6 +124,14 @@ export function allSessions(): SessionRow[] {
     .all() as unknown as SessionRow[];
 }
 
+// 출석부 비고에 새가족을 적을 때 이름 뒤 괄호에 드는 인도자.
+export function inviterById(): Map<number, string> {
+  const rows = getDb()
+    .prepare(`SELECT member_id, inviter FROM newfamily_profile WHERE inviter IS NOT NULL AND inviter <> ''`)
+    .all() as { member_id: number; inviter: string }[];
+  return new Map(rows.map((r) => [r.member_id, r.inviter]));
+}
+
 // 목록 화면이 새가족마다 한 번씩 세지 않도록 한 번에 읽는다.
 export function sessionCounts(): Map<number, number> {
   const rows = getDb()
