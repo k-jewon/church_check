@@ -68,6 +68,17 @@ export function mark(memberId: number, date: string, status: Status): void {
   ).run(memberId, date, status, memberId);
 }
 
+// 현장 입력 경로. 두 사람이 같은 사람을 찍으면 먼저 찍힌 것이 맞다 — 출석은 시각에
+// 기대므로 나중 입력이 더 정확할 까닭이 없다(소유자 결정 2026-09-01, G8). 정정은
+// 현황 화면이 mark()로 한다.
+export function markFirst(memberId: number, date: string, status: Status): void {
+  getDb().prepare(
+    `INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at)
+     SELECT ?, ?, ?, m.stage, m.sok FROM member m WHERE m.id = ?
+     ON CONFLICT (member_id, service_date) DO NOTHING`,
+  ).run(memberId, date, status, memberId);
+}
+
 export function countAttendance(): number {
   const row = getDb().prepare('SELECT COUNT(*) AS n FROM attendance').get() as { n: number };
   return row.n;
