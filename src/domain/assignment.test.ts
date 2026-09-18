@@ -94,6 +94,16 @@ test('새가족속만 예외다 — 이름이 속장에서 나오지 않아 속�
   assert.deepEqual(r, { ok: true, sok: '새가족속' });
 });
 
+test('속장이 없는 새가족속에는 속원·부속장을 넣을 수 없다 — 속장을 먼저 세운다', () => {
+  const 빈새가족속 = buildSokStates(ROSTER.filter((m) => m !== 정무진));
+  for (const role of ['속원', '부속장'] as const) {
+    const r = resolveAssignment({ name: '나병인', role, sok: '새가족속', soks: 빈새가족속 });
+    assert.equal(r.ok, false);
+    assert.match((r as { error: string }).error, /새가족속에 속장이 없습니다/);
+  }
+  assert.deepEqual(ask('나병인', '속원', '새가족속'), { ok: true, sok: '새가족속' }, '속장이 있으면 된다');
+});
+
 test('새가족속에도 속장은 한 명뿐이다', () => {
   const r = ask('나병인', '속장', '새가족속');
   assert.equal(r.ok, false);
@@ -173,8 +183,19 @@ test('속장 교체 — 새 속장을 세우고, 옮기고, 마지막에 구 속
   // ① 부속장 이갑축이 속장이 되면서 갑축속이 생긴다
   assert.deepEqual(ask('이갑축', '속장', null, 이갑축), { ok: true, sok: '갑축속' });
 
-  // ② 속원들이 옮겨 간다 (속원은 자유롭게 옮긴다)
-  assert.deepEqual(ask('박갑인', '속원', '갑축속', 박갑인), { ok: true, sok: '갑축속' });
+  // ② 속원들이 옮겨 간다 (속원은 자유롭게 옮긴다) — ①로 갑축속이 생긴 뒤의 명단에서
+  const 세운뒤 = buildSokStates(ROSTER.map((m) => (m === 이갑축 ? { ...m, sok: '갑축속', role: '속장' as const } : m)));
+  assert.deepEqual(
+    resolveAssignment({
+      id: 박갑인.id,
+      name: '박갑인',
+      role: '속원',
+      sok: '갑축속',
+      current: { sok: '갑자속', role: '속원' },
+      soks: 세운뒤,
+    }),
+    { ok: true, sok: '갑축속' },
+  );
 
   // ③ 아직은 갑자속에 사람이 남아 있어 구 속장이 못 움직인다
   assert.equal(ask('김갑자', '속원', '갑축속', 김갑자).ok, false);

@@ -161,8 +161,14 @@ export function resolveAssignment(req: AssignmentRequest): Assignment {
     return fail('군인속에는 속장·부속장을 둘 수 없습니다.');
   }
 
-  // 속장 한 명, 부속장 한 명.
+  // 군인속 말고는 속장 없는 속이 없다. 일반 속은 속장과 함께 생기므로 걸리지 않고,
+  // 목록에 늘 떠 있는 새가족속이 여기서 걸린다. 이미 그 속에 있는 사람의 수정은 막지 않는다.
   const st = soks.get(target);
+  if (role !== '속장' && target !== SOLDIER_SOK && target !== current?.sok && !st?.leader) {
+    return fail(`${target}에 속장이 없습니다. 속장을 먼저 세우세요.`);
+  }
+
+  // 속장 한 명, 부속장 한 명.
   if (role === '속장' && st?.leader && !isSelf(st.leader)) {
     return fail(`${target}에는 이미 속장 ${st.leader.name}이 있습니다.`);
   }
