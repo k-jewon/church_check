@@ -23,10 +23,27 @@ test('새가족 이름 옆에는 생년 대신 인도자 이름의 뒤 두 글�
   assert.ok(html.includes('>한여울</td>'), '인도자가 없으면 이름만 적고 생년도 적지 않는다');
 });
 
-test('비고의 새가족에는 인도자 전체 이름을 적는다', () => {
+test('비고의 새가족에도 인도자를 뒤 두 글자로 적는다', () => {
   const a = 새가족(1, '정새봄', null);
-  const grid = composeGrid(D, [a], [], [], [], [{ member_id: a.id, last_seen: '2026-05-01' }], new Map([[a.id, '김갑자']]));
+  const b = 새가족(2, '한여울', null);
+  const old = '2026-05-01';
+  const grid = composeGrid(
+    D,
+    [a, b],
+    [],
+    [],
+    [],
+    [
+      { member_id: a.id, last_seen: old },
+      { member_id: b.id, last_seen: old },
+    ],
+    new Map([
+      [a.id, '김갑자'],
+      [b.id, '샘'], // 두 글자 이하는 그대로
+    ]),
+  );
   const html = renderReportHTML(grid, META);
 
-  assert.ok(html.includes('정새봄(김갑자)'));
+  assert.ok(html.includes('정새봄(갑자), 한여울(샘)'));
+  assert.ok(!html.includes('김갑자'));
 });
