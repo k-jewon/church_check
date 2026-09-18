@@ -173,6 +173,49 @@ export function resolveAssignment(req: AssignmentRequest): Assignment {
   return { ok: true, sok: target };
 }
 
+// 명단 파일 한 장에 같은 규칙을 건다(G14). 폼은 고르기만 하므로 오타가 들어올 수
+// 없지만, 파일은 속 이름을 글자로 받는다. 한 칸만 달라도 그 사람은 속장 없는 별도
+// 속으로 그려지고, 규칙을 어긴 채 들어간 명단은 이후 폼 수정도 막는다.
+// 새가족속도 속장이 있어야 하며, 이름이 속장에서 나오지 않는다는 것만 다르다.
+export interface RosterRow {
+  row: number; // 엑셀 행 번호
+  name: string;
+  sok: string;
+  role: Role;
+}
+
+export function rosterErrors(rows: RosterRow[]): string[] {
+  const bySok = new Map<string, RosterRow[]>();
+  for (const r of rows) bySok.set(r.sok, [...(bySok.get(r.sok) ?? []), r]);
+
+  const at = (rs: RosterRow[]) => rs.map((r) => r.row).join('·') + '행';
+  const errors: string[] = [];
+  for (const [sok, rs] of bySok) {
+    const leaders = rs.filter((r) => r.role === '속장');
+    const deputies = rs.filter((r) => r.role === '부속장');
+    if (sok === SOLDIER_SOK) {
+      const heads = [...leaders, ...deputies];
+      if (heads.length) errors.push(`${at(heads)}: 군인속에는 속장·부속장을 둘 수 없습니다.`);
+      continue;
+    }
+    if (leaders.length > 1) errors.push(`${at(leaders)}: ${sok}에 속장이 둘 이상입니다.`);
+    if (deputies.length > 1) errors.push(`${at(deputies)}: ${sok}에 부속장이 둘 이상입니다.`);
+    if (leaders.length === 0) {
+      errors.push(`${at(rs)}: ${sok}에 속장이 없습니다. 속 이름이 속장 행과 한 글자라도 다르면 다른 속이 됩니다.`);
+    } else if (leaders.length === 1 && sok !== NEW_FAMILY_SOK) {
+      const derived = sokNameFromLeader(leaders[0].name);
+      if (derived !== sok) {
+        errors.push(
+          derived
+            ? `${at(leaders)}: 속장 ${leaders[0].name}의 속 이름은 ${derived}이어야 합니다.`
+            : `${at(leaders)}: 속장 이름이 두 글자 이상이어야 속 이름을 만들 수 있습니다.`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 // 직분이 없는 새가족은 속원 뒤로 보낸다.
 export function roleRank(role: Role | null): number {
   return role === null ? ROLES.length : ROLE_RANK[role];

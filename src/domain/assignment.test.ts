@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSokStates, resolveAssignment, type Member, type Role } from './members.js';
+import { buildSokStates, resolveAssignment, rosterErrors, type Member, type Role, type RosterRow } from './members.js';
 
 // 속 배정 규칙만 본다. DB도 화면도 없다.
 //
@@ -190,4 +190,58 @@ test('속장 교체 — 새 속장을 세우고, 옮기고, 마지막에 구 속
     soks: 비운뒤,
   });
   assert.deepEqual(r, { ok: true, sok: '갑축속' });
+});
+
+// ---- 명단 적재는 같은 규칙을 파일 한 장에 건다 ----
+
+const 행 = (row: number, name: string, sok: string, role: Role): RosterRow => ({ row, name, sok, role });
+
+test('명단 — 규칙을 지키는 파일은 오류가 없다', () => {
+  assert.deepEqual(
+    rosterErrors([
+      행(2, '김갑자', '갑자속', '속장'),
+      행(3, '이갑축', '갑자속', '부속장'),
+      행(4, '박갑인', '갑자속', '속원'),
+      행(5, '한결', '군인', '속원'),
+      행(6, '정무진', '새가족속', '속장'), // 새가족속의 이름은 속장에서 나오지 않는다
+      행(7, '오새길', '새가족속', '속원'),
+    ]),
+    [],
+  );
+});
+
+test('명단 — 새가족속에도 속장이 있어야 한다', () => {
+  assert.deepEqual(rosterErrors([행(2, '오새길', '새가족속', '속원')]), [
+    '2행: 새가족속에 속장이 없습니다. 속 이름이 속장 행과 한 글자라도 다르면 다른 속이 됩니다.',
+  ]);
+});
+
+test('명단 — 속 이름 오타는 속장 없는 속으로 걸린다', () => {
+  const errors = rosterErrors([
+    행(2, '김갑자', '갑자속', '속장'),
+    행(3, '박갑인', '갑자 속', '속원'),
+  ]);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^3행: 갑자 속에 속장이 없습니다/);
+});
+
+test('명단 — 속 이름은 속장 이름에서 나와야 한다', () => {
+  assert.deepEqual(rosterErrors([행(2, '김갑자', '을축속', '속장')]), [
+    '2행: 속장 김갑자의 속 이름은 갑자속이어야 합니다.',
+  ]);
+});
+
+test('명단 — 속장·부속장은 한 명씩이고 군인속에는 둘 다 없다', () => {
+  const errors = rosterErrors([
+    행(2, '김갑자', '갑자속', '속장'),
+    행(3, '최갑자', '갑자속', '속장'),
+    행(4, '이갑축', '갑자속', '부속장'),
+    행(5, '박갑인', '갑자속', '부속장'),
+    행(6, '한결', '군인', '부속장'),
+  ]);
+  assert.deepEqual(errors, [
+    '2·3행: 갑자속에 속장이 둘 이상입니다.',
+    '4·5행: 갑자속에 부속장이 둘 이상입니다.',
+    '6행: 군인속에는 속장·부속장을 둘 수 없습니다.',
+  ]);
 });

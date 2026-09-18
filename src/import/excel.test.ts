@@ -32,7 +32,7 @@ test('formatBirthYear: 2-digit padded', () => {
 test('parseRoster: valid rows normalize and pass', async () => {
   const buf = await buildXlsx([
     ['유동훈', 90, '동훈속', '속장'],
-    ['이수현', 0, '현동속', '속원'],
+    ['이수현', 0, '동훈속', '속원'],
   ]);
   const { members, errors } = await parseRoster(buf);
   assert.equal(errors.length, 0);
@@ -59,4 +59,23 @@ test('parseRoster: blank rows are skipped', async () => {
   const { members, errors } = await parseRoster(buf);
   assert.equal(errors.length, 0);
   assert.equal(members.length, 1);
+});
+
+test('parseRoster: 속 규칙을 어긴 명단은 행 번호와 함께 거부된다 (G14)', async () => {
+  const buf = await buildXlsx([
+    ['유동훈', 90, '동훈속', '속장'],
+    ['이수현', 0, '동훈 속', '속원'], // 오타 한 칸이 별도 속을 만든다
+  ]);
+  const { errors } = await parseRoster(buf);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^3행: 동훈 속에 속장이 없습니다/);
+});
+
+test('parseRoster: 출생연도만 틀린 속장은 그 속을 속장 없는 속으로 만들지 않는다', async () => {
+  const buf = await buildXlsx([
+    ['유동훈', 'x', '동훈속', '속장'],
+    ['이수현', 0, '동훈속', '속원'],
+  ]);
+  const { errors } = await parseRoster(buf);
+  assert.deepEqual(errors, ['2행: 출생연도 오류(x)']);
 });
