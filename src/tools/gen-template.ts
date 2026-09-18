@@ -22,9 +22,10 @@ header.font = { bold: true };
 header.alignment = { horizontal: 'center' };
 
 // Example rows (사용자는 이 예시를 지우고 실제 명단으로 채운다).
-ws.addRow({ name: '홍길동', birth_year: 97, sok: '동훈속', role: '속장' });
+// 적재가 속 규칙을 검사하므로 예시도 지킨다 — 속 이름은 속장 이름의 뒤 두 글자 + `속`.
+ws.addRow({ name: '유동훈', birth_year: 97, sok: '동훈속', role: '속장' });
+ws.addRow({ name: '이영희', birth_year: 2001, sok: '동훈속', role: '부속장' });
 ws.addRow({ name: '김철수', birth_year: 0, sok: '동훈속', role: '속원' });
-ws.addRow({ name: '이영희', birth_year: 2001, sok: '수정속', role: '부속장' });
 
 // 직분 dropdown on the data rows.
 for (let r = 2; r <= 500; r++) {

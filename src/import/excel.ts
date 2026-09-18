@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { isRole, normalizeBirthYear, type NewMember } from '../domain/members.js';
+import { isRole, normalizeBirthYear, rosterErrors, type NewMember, type RosterRow } from '../domain/members.js';
 
 export interface ParseResult {
   members: NewMember[];
@@ -14,6 +14,7 @@ export async function parseRoster(data: ArrayBuffer | Buffer): Promise<ParseResu
   const ws = wb.worksheets[0];
   const members: NewMember[] = [];
   const errors: string[] = [];
+  const roster: RosterRow[] = [];
 
   if (!ws) return { members, errors: ['시트를 찾을 수 없습니다.'] };
 
@@ -29,6 +30,10 @@ export async function parseRoster(data: ArrayBuffer | Buffer): Promise<ParseResu
     if (!name && !sok && !role && (birthRaw === null || birthRaw === undefined || birthRaw === '')) {
       return;
     }
+
+    // 속 규칙은 이름·속·직분만 본다. 출생연도만 틀린 속장 때문에 그 속이
+    // 속장 없는 속으로 오보되지 않게 행 오류와 따로 모은다.
+    if (name && sok && isRole(role)) roster.push({ row: rowNumber, name, sok, role });
 
     const rowErrors: string[] = [];
     if (!name) rowErrors.push('이름 없음');
@@ -52,6 +57,7 @@ export async function parseRoster(data: ArrayBuffer | Buffer): Promise<ParseResu
     });
   });
 
+  errors.push(...rosterErrors(roster));
   return { members, errors };
 }
 
