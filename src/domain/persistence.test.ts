@@ -8,6 +8,7 @@ import { attendanceInRange, getStatus, lastSeenUpTo, mark, markFirst } from './a
 import {
   addSession,
   allSessions,
+  deleteNewFamily,
   countSessions,
   getProfile,
   inviterById,
@@ -16,6 +17,7 @@ import {
   registerNewFamily,
   sessionCounts,
   sessionsOn,
+  updateNewFamily,
 } from './newfamily.js';
 import { addVisit, listVisits, visitsInRange } from './visitlog.js';
 
@@ -194,6 +196,46 @@ test('승격은 등록정보와 회차를 지우지 않는다', () => {
   assert.equal(m.role, '속원');
   assert.equal(getProfile(id)!.phone, '010-1111-2222', '연락처는 담당 사역자의 것이라 남는다');
   assert.equal(countSessions(id), 2, '회차는 그 사람이 무엇을 했는지의 기록이라 남는다');
+});
+
+test('새가족 수정은 신분·속을 건드리지 않고 등록정보를 갈아 끼운다', () => {
+  const id = registerNewFamily(
+    { name: '정새봄', birth_year: 2001 },
+    { phone: '010-1111-2222', inviter: '김갑자', route: '지인소개' },
+  );
+  addSession(id, D1);
+
+  updateNewFamily(id, { name: '정새봄', birth_year: 2002 }, { phone: '010-3333-4444', route: '전도' });
+
+  const m = listMembers().find((x) => x.id === id)!;
+  assert.equal(m.birth_year, 2002);
+  assert.equal(m.stage, '새가족');
+  assert.equal(m.sok, null, '수정이 승격으로 새면 안 된다');
+  assert.equal(m.role, null);
+  const p = getProfile(id)!;
+  assert.equal(p.phone, '010-3333-4444');
+  assert.equal(p.inviter, null, '비운 칸은 비워진다');
+  assert.equal(countSessions(id), 1, '회차는 수정이 건드리지 않는다');
+});
+
+test('새가족 삭제는 등록정보·회차·출석까지 함께 지운다', () => {
+  const id = registerNewFamily({ name: '정새봄', birth_year: null }, { phone: '010-0000-0000' });
+  mark(id, D1, 'before');
+  addSession(id, D1);
+
+  assert.equal(deleteNewFamily(id), true);
+
+  assert.equal(listMembers().find((x) => x.id === id), undefined);
+  assert.equal(getProfile(id), undefined);
+  assert.equal(countSessions(id), 0);
+  assert.equal(attendanceInRange([D1]).length, 0);
+});
+
+test('성도는 새가족 삭제 경로로 지워지지 않는다', () => {
+  const id = 성도('김갑자', '갑자속', '속장', 1985);
+
+  assert.equal(deleteNewFamily(id), false);
+  assert.equal(listMembers().find((x) => x.id === id)!.name, '김갑자');
 });
 
 test('그 주일의 모임 참여자만 돌려준다', () => {

@@ -24,18 +24,21 @@ import {
   type Member,
 } from '../domain/members.js';
 import {
+  deleteNewFamily,
   getProfile,
   isRoute,
   promoteToBeliever,
   registerNewFamily,
   ROUTES,
   sessionCounts,
+  updateNewFamily,
   type NewProfile,
 } from '../domain/newfamily.js';
 import {
   parseProfileForm,
   profileForm,
   profileValues,
+  profileValuesOf,
   type ProfileFormValues,
 } from '../views/newfamily-form.js';
 import { parseRoster } from '../import/excel.js';
@@ -206,7 +209,12 @@ function newFamilyPage(opts?: { values?: ProfileFormValues; alert?: string }) {
                   ${detail ? html` <span class="muted">${detail}</span>` : raw('')}
                 </span>
                 <span class="row-actions">
+                  <a href="/admin/newfamily/${m.id}/edit">수정</a>
                   <a href="/admin/newfamily/${m.id}/promote">성도로 승격</a>
+                  <form method="post" action="/admin/newfamily/${m.id}/delete" class="inline"
+                    onsubmit="return confirm('${m.name} 님을 지웁니다. 등록정보·모임 회차·이미 찍힌 출석이 함께 사라지며 되돌릴 수 없습니다. 계속합니까?');">
+                    <button class="linklike" type="submit">삭제</button>
+                  </form>
                 </span>
               </li>`;
           })}
@@ -234,6 +242,51 @@ adminRoutes.post('/newfamily', async (c) => {
     return c.html(newFamilyPage({ values: profileValues(body), alert: parsed.error }), 400);
   }
   registerNewFamily(parsed.member, parsed.profile);
+  return c.redirect('/admin/newfamily');
+});
+
+// 수정 — 이름·생년과 등록정보만 고친다. 속·직분 칸이 없으므로 저장이 승격으로
+// 새지 않는다. 명단 관리 화면이 새가족을 막아 둔 이유가 여기서 풀린다.
+adminRoutes.get('/newfamily/:id/edit', (c) => {
+  const m = getMember(Number(c.req.param('id')));
+  if (!m) return c.html(errorPage('새가족을 찾을 수 없습니다.', '/admin/newfamily'), 404);
+  if (m.stage !== '새가족') return c.html(errorPage('이미 정식 성도입니다.', '/admin/newfamily'), 400);
+  return c.html(editNewFamilyPage(m, profileValuesOf(m, getProfile(m.id))));
+});
+
+function editNewFamilyPage(m: Member, values: ProfileFormValues, alert?: string) {
+  const body = html`
+    <div class="card">
+      <h1>새가족 수정</h1>
+      ${profileForm(`/admin/newfamily/${m.id}`, values, '저장')}
+      <p class="muted">모임 회차는 주일 출석 입력 화면에서 체크합니다. 속 배정은 <a href="/admin/newfamily/${m.id}/promote">승격</a>에서 합니다.</p>
+      <p><a href="/admin/newfamily">← 새가족 관리</a></p>
+    </div>
+    ${alertScript(alert)}`;
+  return page({ title: '새가족 수정', section: 'admin', body });
+}
+
+adminRoutes.post('/newfamily/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const m = getMember(id);
+  if (!m) return c.html(errorPage('새가족을 찾을 수 없습니다.', '/admin/newfamily'), 404);
+  if (m.stage !== '새가족') return c.html(errorPage('이미 정식 성도입니다.', '/admin/newfamily'), 400);
+
+  const body = await c.req.parseBody();
+  const parsed = parseProfileForm(body);
+  if ('error' in parsed) {
+    return c.html(editNewFamilyPage(m, profileValues(body), parsed.error), 400);
+  }
+  updateNewFamily(id, parsed.member, parsed.profile);
+  return c.redirect('/admin/newfamily');
+});
+
+// 삭제 — 오등록을 되돌리는 일이다. 출석까지 함께 지워지므로 새가족에만 둔다.
+adminRoutes.post('/newfamily/:id/delete', (c) => {
+  const id = Number(c.req.param('id'));
+  if (!deleteNewFamily(id)) {
+    return c.html(errorPage('새가족을 찾을 수 없습니다.', '/admin/newfamily'), 404);
+  }
   return c.redirect('/admin/newfamily');
 });
 

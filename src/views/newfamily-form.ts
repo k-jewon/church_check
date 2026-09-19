@@ -1,6 +1,6 @@
 import { html, raw, type Raw } from './layout.js';
-import { normalizeBirthYear } from '../domain/members.js';
-import { isRoute, ROUTES, type NewProfile } from '../domain/newfamily.js';
+import { formatBirthYear, normalizeBirthYear, type Member } from '../domain/members.js';
+import { isRoute, ROUTES, type NewProfile, type Profile } from '../domain/newfamily.js';
 
 // 새가족 등록 폼과 그 파싱. 두 화면이 같은 것을 쓴다 — 주일 현장(입력)과 사역자
 // (관리자) 둘 다 등록하기 때문이다.
@@ -33,9 +33,22 @@ export function profileValues(body: Record<string, unknown>): ProfileFormValues 
   };
 }
 
+// 수정 화면이 지금 저장된 것을 그대로 띄운다. 폼은 글자만 다루므로 여기서 갈아 끼운다.
+export function profileValuesOf(m: Member, p?: Profile): ProfileFormValues {
+  return {
+    name: m.name,
+    birth_year: formatBirthYear(m.birth_year),
+    phone: p?.phone ?? '',
+    gender: p?.gender ?? '',
+    inviter: p?.inviter ?? '',
+    route: p?.route ?? '',
+    route_note: p?.route_note ?? '',
+  };
+}
+
 const GENDERS = ['남', '여'];
 
-export function profileForm(action: string, v?: ProfileFormValues): Raw {
+export function profileForm(action: string, v?: ProfileFormValues, submitLabel = '등록'): Raw {
   return html`
     <form method="post" action="${action}">
       <label>이름<input name="name" value="${v?.name ?? ''}" required /></label>
@@ -55,7 +68,7 @@ export function profileForm(action: string, v?: ProfileFormValues): Raw {
         </select>
       </label>
       <label>방문경로 상세 (<code>기타</code>일 때만 저장됩니다)<input name="route_note" value="${v?.route_note ?? ''}" /></label>
-      <button type="submit">등록</button>
+      <button type="submit">${submitLabel}</button>
     </form>`;
 }
 

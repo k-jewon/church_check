@@ -1,5 +1,5 @@
 import { getDb } from '../db/index.js';
-import { createMember, type Role } from './members.js';
+import { createMember, updateMember, type Role } from './members.js';
 
 // 새가족 등록정보와 회차. 둘 다 member(stage='새가족')에 매달린다.
 // 근거: context/wayfinder/tickets/12-방문-새가족-등록-경로-통합.md
@@ -151,4 +151,32 @@ export function promoteToBeliever(memberId: number, sok: string, role: Role): vo
   getDb()
     .prepare(`UPDATE member SET stage = '성도', sok = ?, role = ? WHERE id = ?`)
     .run(sok, role, memberId);
+}
+
+// ---- 수정·삭제 ----
+
+// 이름·생년과 등록정보를 함께 고친다. 신분·속·직분은 이 경로로 바뀌지 않는다 —
+// 성도가 되는 것은 승격의 일이다.
+export function updateNewFamily(
+  memberId: number,
+  member: { name: string; birth_year: number | null },
+  profile: NewProfile,
+): void {
+  getDb().exec('BEGIN');
+  try {
+    updateMember(memberId, { ...member, stage: '새가족', sok: null, role: null });
+    saveProfile(memberId, profile);
+    getDb().exec('COMMIT');
+  } catch (err) {
+    getDb().exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// 잘못 등록한 사람을 지운다. 등록정보·회차·출석이 CASCADE 로 함께 사라지므로
+// 오등록을 되돌리는 일에만 쓴다. 성도는 이 경로로 지워지지 않는다 — 명단에서
+// 사라질 사람은 비활성으로 남긴다.
+export function deleteNewFamily(memberId: number): boolean {
+  const info = getDb().prepare(`DELETE FROM member WHERE id = ? AND stage = '새가족'`).run(memberId);
+  return Number(info.changes) > 0;
 }
