@@ -28,8 +28,8 @@ export interface GridMember {
   id: number;
   name: string;
   birth_year: number | null;
-  role: Role | null; // 새가족은 직분이 없고, 옛 자리에서는 그때의 직분을 모른다
-  statuses: (Status | null)[]; // aligned to dates — 이 자리에 있던 주만 채운다
+  role: Role | null; // 새가족은 직분이 없다
+  statuses: (Status | null)[]; // aligned to dates
   sessions: string[]; // 회차 칸에 적을 모임 날짜(최대 SESSION_COLS). 새가족 섹션에서만 쓴다
   inviter: string | null; // 인도자 — 새가족 섹션에서 이름 옆 첨자로 단다
   isLeader: boolean; // 속장·부속장 → 회색 강조
@@ -161,41 +161,31 @@ export function composeGrid(
   for (const list of sessionsByMember.values()) list.sort();
 
   // ---- 속 테이블 ----
-  // 출석은 그날의 신분·속 자리에 그린다(G7). 기간 중에 자리가 바뀐 사람은 두 자리에
-  // 각각 그 주만 채워 서고, 기간 안에 흔적이 없는 사람은 지금 자리에 선다.
+  // 사람은 지금 신분·속 한 자리에 한 줄로 선다(promote-visit 티켓 02). 출석 행의 스냅샷은
+  // 자리를 정하지 않고 출석합계의 구분에만 쓰므로, 줄은 그 사람의 기간 안 출석을 모두 담는다.
   const sokMap = new Map<string, { kind: SokKind; members: GridMember[] }>();
   for (const m of members) {
-    const mine = rowsByMember.get(m.id) ?? [];
-    const sessions = sessionsByMember.get(m.id) ?? [];
-
-    const places = new Map<string, Place>();
-    for (const r of mine) places.set(sectionOf(placeOfRow(r)), placeOfRow(r));
-    if (sessions.some((d) => inRange.has(d))) places.set(NEW_FAMILY, { stage: '새가족', sok: null });
-    if (places.size === 0) places.set(sectionOf(m), m);
-
-    for (const [section, place] of places) {
-      const kind = kindOf(place);
-      const role = section === sectionOf(m) ? m.role : null;
-      const marks = new Map<string, Status>();
-      for (const r of mine) if (sectionOf(placeOfRow(r)) === section) marks.set(r.service_date, r.status);
-      const gm: GridMember = {
-        id: m.id,
-        name: m.name,
-        birth_year: m.birth_year,
-        role,
-        statuses: dates.map((d) => marks.get(d) ?? null),
-        sessions: kind === 'newfamily' ? sessionCells(sessions) : [],
-        inviter: kind === 'newfamily' ? (inviters.get(m.id) ?? null) : null,
-        isLeader: role !== null && role !== '속원',
-      };
-      const entry = sokMap.get(section) ?? { kind, members: [] };
-      entry.members.push(gm);
-      sokMap.set(section, entry);
-    }
+    const section = sectionOf(m);
+    const kind = kindOf(m);
+    const marks = new Map<string, Status>();
+    for (const r of rowsByMember.get(m.id) ?? []) marks.set(r.service_date, r.status);
+    const gm: GridMember = {
+      id: m.id,
+      name: m.name,
+      birth_year: m.birth_year,
+      role: m.role,
+      statuses: dates.map((d) => marks.get(d) ?? null),
+      sessions: kind === 'newfamily' ? sessionCells(sessionsByMember.get(m.id) ?? []) : [],
+      inviter: kind === 'newfamily' ? (inviters.get(m.id) ?? null) : null,
+      isLeader: m.role !== null && m.role !== '속원',
+    };
+    const entry = sokMap.get(section) ?? { kind, members: [] };
+    entry.members.push(gm);
+    sokMap.set(section, entry);
   }
 
   // 섹션 안의 순서. 새가족은 첫 회차 날짜순이고 회차가 없으면 뒤에 선다(소유자 확정 2026-09-18).
-  // 그 밖은 직분 → 생년 → 이름이다. 옛 자리에서 온 사람이 섞이므로 입력 순서에 기대지 않는다.
+  // 그 밖은 직분 → 생년 → 이름이다.
   const firstSession = (m: GridMember) => m.sessions[0] ?? '9999-12-31';
   for (const e of sokMap.values()) {
     e.members.sort(
@@ -235,7 +225,7 @@ export function composeGrid(
   const remarks: Remarks = { believers: [], newFamily: [] };
   for (const sok of soks) {
     for (const gm of sok.members) {
-      if (!due.delete(gm.id)) continue; // 두 자리에 선 사람도 한 번만 적는다
+      if (!due.delete(gm.id)) continue;
       const m = memberById.get(gm.id)!;
       if (m.stage === NEW_FAMILY) remarks.newFamily.push({ name: m.name, inviter: inviters.get(m.id) ?? null });
       else remarks.believers.push(m.name);

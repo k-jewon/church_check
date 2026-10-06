@@ -181,9 +181,10 @@ test('예배 축의 `기타`는 다른 예배에 간 성도이지 방문이 아�
 });
 
 // ---------------------------------------------------------------------------
-// 스냅샷 — 출석 행은 지금이 아니라 그날의 신분·속 자리에 그려진다(G7).
+// 자리 — 사람은 지금 신분·속 한 자리에 한 줄로 서고, 출석 행의 스냅샷은
+// 출석합계의 청년 / 새가족+기타 구분에만 쓴다(promote-visit 티켓 02).
 // ---------------------------------------------------------------------------
-test('기간 중에 승격한 사람은 그날의 자리에 각각 남는다', () => {
+test('기간 중에 승격한 사람은 지금 속 한 줄에 서고 합계는 그날 신분으로 센다', () => {
   const leader = 성도('김갑자', '갑자속', '속장', 1985);
   const 승격 = 성도('정새봄', '갑자속', '속원', 2001); // 지금은 성도다
   const rows = [
@@ -193,9 +194,8 @@ test('기간 중에 승격한 사람은 그날의 자리에 각각 남는다', (
   const grid = composeGrid(D, [leader, 승격], rows, []);
 
   const 갑자속 = grid.soks.find((s) => s.name === '갑자속')!;
-  const 새가족섹션 = grid.soks.find((s) => s.name === '새가족')!;
-  assert.deepEqual(갑자속.members.find((m) => m.id === 승격.id)!.statuses, [null, 'after']);
-  assert.deepEqual(새가족섹션.members.map((m) => m.id), [승격.id]);
+  assert.deepEqual(갑자속.members.find((m) => m.id === 승격.id)!.statuses, ['before', 'after']);
+  assert.equal(grid.soks.find((s) => s.name === '새가족'), undefined, '승격한 사람은 새가족 칸에 없다');
 
   assert.deepEqual(
     grid.summary.map((s) => [s.youth, s.newFamilyEtc]),
@@ -206,27 +206,25 @@ test('기간 중에 승격한 사람은 그날의 자리에 각각 남는다', (
   );
 });
 
-test('지난 기간을 다시 뽑으면 지금의 속이 아니라 그때의 자리에만 있다', () => {
+test('지난 기간을 다시 뽑아도 지금의 속에 서고 합계는 그때 신분으로 센다', () => {
   const leader = 성도('김갑자', '갑자속', '속장', 1985);
   const 승격 = 성도('정새봄', '갑자속', '속원', 2001);
   const then = { stage_at: '새가족', sok_at: null } as const;
   const grid = composeGrid(D, [leader, 승격], [출석(승격, D[0], 'before', then), 출석(승격, D[1], 'before', then)], []);
 
   const 갑자속 = grid.soks.find((s) => s.name === '갑자속')!;
-  assert.deepEqual(갑자속.members.map((m) => m.id), [leader.id], '그 기간에 이 사람은 갑자속이 아니었다');
-  assert.equal(grid.summary[0]!.youth, 0);
+  assert.deepEqual(갑자속.members.map((m) => m.id), [leader.id, 승격.id]);
+  assert.equal(grid.summary[0]!.youth, 0, '그날은 새가족이었다');
 });
 
-test('옛 자리에서는 지금의 직분으로 강조하지 않는다', () => {
-  const 옛속장 = 성도('이가온', '을축속', '속원', 1990);
-  const 새속장 = 성도('김갑자', '갑자속', '속장', 1985);
-  const 옮긴이 = 성도('박병인', '갑자속', '부속장', 1992); // 지금은 갑자속 부속장, 그날은 을축속
-  const rows = [출석(옮긴이, D[0], 'before', { stage_at: '성도', sok_at: '을축속' })];
-  const grid = composeGrid(D, [옛속장, 새속장, 옮긴이], rows, []);
+test('승격한 뒤 기간 안에 출석이 없어도 지금 속에 빈 줄로 선다', () => {
+  const leader = 성도('김갑자', '갑자속', '속장', 1985);
+  const 승격 = 성도('정새봄', '갑자속', '속원', 2001);
+  const rows = [출석(leader, D[0], 'before'), 출석(leader, D[1], 'before')];
+  const grid = composeGrid(D, [leader, 승격], rows, []);
 
-  const 을축속 = grid.soks.find((s) => s.name === '을축속')!;
-  const 옛자리 = 을축속.members.find((m) => m.id === 옮긴이.id)!;
-  assert.equal(옛자리.isLeader, false, '그때의 직분은 기록되지 않았다');
+  const 갑자속 = grid.soks.find((s) => s.name === '갑자속')!;
+  assert.deepEqual(갑자속.members.find((m) => m.id === 승격.id)!.statuses, [null, null]);
 });
 
 // ---------------------------------------------------------------------------
@@ -275,13 +273,14 @@ test('새가족 행은 첫 회차 날짜순이고 회차가 없는 사람은 뒤
   assert.deepEqual(grid.soks[0]!.members.map((m) => m.name), ['다라마', '가나다', '나다라']);
 });
 
-test('기간 안에 모임을 한 사람은 지금 성도여도 새가족 칸에 있다', () => {
+test('기간 안에 모임을 했어도 지금 성도면 새가족 칸에 없고 회차·인도자를 들지 않는다', () => {
   const leader = 성도('김갑자', '갑자속', '속장', 1985);
   const 승격 = 성도('정새봄', '갑자속', '속원', 2001);
-  const grid = composeGrid(D, [leader, 승격], [], [], [회차(승격, D[0])]);
+  const grid = composeGrid(D, [leader, 승격], [], [], [회차(승격, D[0])], [], new Map([[승격.id, '김갑자']]));
 
-  const 새가족섹션 = grid.soks.find((s) => s.name === '새가족')!;
-  assert.deepEqual(새가족섹션.members[0]!.sessions, [D[0]]);
+  assert.deepEqual(grid.soks.map((s) => s.name), ['갑자속']);
+  const row = grid.soks[0]!.members.find((m) => m.id === 승격.id)!;
+  assert.deepEqual([row.sessions, row.inviter], [[], null]);
 });
 
 // ---------------------------------------------------------------------------
