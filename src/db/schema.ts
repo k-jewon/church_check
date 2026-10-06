@@ -106,3 +106,27 @@ CREATE TABLE attendance (
 );
 CREATE INDEX idx_attendance_date ON attendance(service_date);
 `;
+
+// v3 — 예배 축에서 `기타`를 없앤다. 다른 예배에 간 것은 결석이고 결석은 행의 부재이므로
+// 기존 `기타` 행은 지운다. SQLite는 CHECK를 고치려면 테이블을 다시 만들어야 한다.
+// 근거: context/wayfinder/promote-visit/tickets/03-입력현황-방문-집계.md
+export const SCHEMA_V3_SQL = `
+DELETE FROM attendance WHERE status = 'etc';
+
+-- 당시 신분과 당시 속을 함께 박는다. 나중에 속이 바뀌어도 과거 지면이 소급해 다시 그려지지 않는다.
+CREATE TABLE attendance_v3 (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id    INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE,
+  service_date TEXT    NOT NULL,
+  status       TEXT    NOT NULL CHECK (status IN ('before','praise','after','main')),
+  stage_at     TEXT    NOT NULL CHECK (stage_at IN ('새가족','성도')),
+  sok_at       TEXT,
+  updated_at   TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+  UNIQUE (member_id, service_date)
+);
+INSERT INTO attendance_v3 (id, member_id, service_date, status, stage_at, sok_at, updated_at)
+  SELECT id, member_id, service_date, status, stage_at, sok_at, updated_at FROM attendance;
+DROP TABLE attendance;
+ALTER TABLE attendance_v3 RENAME TO attendance;
+CREATE INDEX idx_attendance_date ON attendance(service_date);
+`;

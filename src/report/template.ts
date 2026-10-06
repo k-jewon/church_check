@@ -9,7 +9,6 @@ const SYMBOL: Record<Status, string> = {
   praise: '○',
   after: '◉',
   main: '본',
-  etc: '기',
 };
 
 function md(iso: string): string {

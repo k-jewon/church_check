@@ -32,6 +32,7 @@ import {
 } from '../views/newfamily-form.js';
 import { addVisit, listVisits, removeVisit } from '../domain/visitlog.js';
 import { currentRole } from '../auth/middleware.js';
+import { statusCountsBar } from '../views/status-counts.js';
 
 export const inputRoutes = new Hono();
 
@@ -143,28 +144,20 @@ inputRoutes.get('/input/status', async (c) => {
   const marked = marksForDate(date);
   const counts = statusCounts(date);
   const unmarked = unmarkedCount(date);
-  const roster = marked.length + unmarked; // 활성 전체 명단 (입력됨 + 미출석)
 
   // pill 클릭 시 필터: 상태값 | 'unmarked'(미출석 명단) | 없음(입력 전체)
   const filterQ = c.req.query('filter');
   const statusFilter = isStatus(filterQ) ? filterQ : null;
   const unmarkedView = filterQ === 'unmarked';
 
-  const pill = (href: string, active: boolean, label: Raw) =>
-    html`<a class="count-pill ${active ? raw('active') : raw('')}" href="${href}">${label}</a>`;
-
-  const summary = html`
-    <div class="counts">
-      ${pill(`/input/status?date=${date}`, !unmarkedView && statusFilter === null, html`입력됨 <strong>${marked.length}</strong>`)}
-      ${STATUSES.map((s) =>
-        pill(
-          `/input/status?date=${date}&filter=${s.value}`,
-          !unmarkedView && statusFilter === s.value,
-          html`${s.label} ${s.symbol} <strong>${counts[s.value]}</strong>`,
-        ),
-      )}
-      ${pill(`/input/status?date=${date}&filter=unmarked`, unmarkedView, html`미출석 <strong>${unmarked}</strong> / ${roster}`)}
-    </div>`;
+  const summary = statusCountsBar({
+    date,
+    marked: marked.length,
+    counts,
+    unmarked,
+    visits: listVisits(date).length,
+    filter: unmarkedView ? 'unmarked' : statusFilter,
+  });
 
   let rows: Raw;
   if (unmarkedView) {

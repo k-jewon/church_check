@@ -1,7 +1,7 @@
 import { getDb } from '../db/index.js';
 import { roleRank, type Member, type Stage } from './members.js';
 
-export type Status = 'before' | 'praise' | 'after' | 'main' | 'etc';
+export type Status = 'before' | 'praise' | 'after' | 'main';
 
 export interface StatusDef {
   value: Status;
@@ -15,15 +15,14 @@ export const STATUSES: StatusDef[] = [
   { value: 'praise', label: '찬양중', symbol: '○' },
   { value: 'after', label: '찬양후', symbol: '◉' },
   { value: 'main', label: '본당', symbol: '본' },
-  { value: 'etc', label: '기타', symbol: '기타' },
 ];
 
-// 이분법 출석: 예배전·찬양중·찬양후·기타만 출석. 본당·결석은 비출석
+// 이분법 출석: 예배전·찬양중·찬양후만 출석. 본당·결석은 비출석
 // (본당예배는 출석인원에 포함하지 않음).
-const ATTENDED_SET = new Set<Status>(['before', 'praise', 'after', 'etc']);
+const ATTENDED_SET = new Set<Status>(['before', 'praise', 'after']);
 
 export function isStatus(v: unknown): v is Status {
-  return v === 'before' || v === 'praise' || v === 'after' || v === 'main' || v === 'etc';
+  return v === 'before' || v === 'praise' || v === 'after' || v === 'main';
 }
 
 export function symbolOf(status: Status): string {
@@ -42,7 +41,7 @@ export function countAttended(seq: (Status | null)[]): number {
   return seq.filter(isAttended).length;
 }
 
-// True if any run of >= n consecutive non-attended weeks exists (etc/absent both count).
+// True if any run of >= n consecutive non-attended weeks exists (main/absent both count).
 export function hasConsecutiveAbsence(seqChrono: (Status | null)[], n = 3): boolean {
   let run = 0;
   for (const s of seqChrono) {
@@ -154,7 +153,7 @@ export function statusCounts(date: string): Record<Status, number> {
   const rows = getDb()
     .prepare('SELECT status, COUNT(*) AS n FROM attendance WHERE service_date = ? GROUP BY status')
     .all(date) as { status: Status; n: number }[];
-  const out: Record<Status, number> = { before: 0, praise: 0, after: 0, main: 0, etc: 0 };
+  const out: Record<Status, number> = { before: 0, praise: 0, after: 0, main: 0 };
   for (const r of rows) out[r.status] = r.n;
   return out;
 }

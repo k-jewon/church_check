@@ -65,3 +65,27 @@ test('a failing migration rolls back and leaves the version untouched', () => {
   assert.equal(userVersion(db), LATEST);
   assert.ok(!tableNames(db).includes('half_done'));
 });
+
+test('v3: 예배 축의 `기타` 행은 지우고 다른 행은 남기며, 이후 `기타`를 받지 않는다', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, MIGRATIONS.filter((m) => m.version <= 2));
+  db.exec("INSERT INTO member (id, name, stage, sok, role) VALUES (1, '홍길동', '성도', '길동속', '속장')");
+  db.exec(`INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at) VALUES
+    (1, '2026-09-06', 'before', '성도', '길동속'),
+    (1, '2026-09-13', 'etc',    '성도', '길동속'),
+    (1, '2026-09-20', 'main',   '성도', '길동속')`);
+
+  migrate(db);
+
+  const rows = db.prepare('SELECT service_date, status FROM attendance ORDER BY service_date').all();
+  assert.deepEqual(
+    rows.map((r) => ({ ...r })),
+    [
+      { service_date: '2026-09-06', status: 'before' },
+      { service_date: '2026-09-20', status: 'main' },
+    ],
+  );
+  assert.throws(() =>
+    db.exec("INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at) VALUES (1, '2026-09-27', 'etc', '성도', '길동속')"),
+  );
+});
