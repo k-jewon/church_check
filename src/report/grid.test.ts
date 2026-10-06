@@ -171,15 +171,6 @@ test('출석합계: 청년은 속회 인원뿐이고 새가족·군인·방문�
   assert.deepEqual(grid.summary[0], { date: D[0], youth: 2, newFamilyEtc: 3, total: 5 });
 });
 
-test('예배 축의 `기타`는 다른 예배에 간 성도이지 방문이 아니다', () => {
-  const m = 성도('김갑자', '갑자속', '속장', 1985);
-  const grid = composeGrid([D[0]], [m], [출석(m, D[0], 'etc')], []);
-
-  assert.deepEqual(grid.visits, [], '`기타` 성도가 방문 줄에 실리면 안 된다');
-  assert.equal(grid.summary[0]!.youth, 1, '성도의 `기타` 출석은 사람 축으로 청년이다');
-  assert.equal(grid.summary[0]!.newFamilyEtc, 0);
-});
-
 // ---------------------------------------------------------------------------
 // 자리 — 사람은 지금 신분·속 한 자리에 한 줄로 서고, 출석 행의 스냅샷은
 // 출석합계의 청년 / 새가족+기타 구분에만 쓴다(promote-visit 티켓 02).

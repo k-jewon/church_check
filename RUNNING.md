@@ -60,7 +60,7 @@ npx tsx src/tools/gen-sample.ts sample-roster.xlsx
 
 ### 입력 (`/`)
 - 상단 **주일 드롭다운**: 기본은 이번 주일. 지난 주를 고르면 보정 입력.
-- **출석 상태 드롭다운**(예배전/찬양중/찬양후/본당/기타)을 먼저 고른다.
+- **출석 상태 드롭다운**(예배전/찬양중/찬양후/본당)을 먼저 고른다.
 - **이름 검색**에 한 글자 치면 *미출석자만* 자동완성으로 뜬다. 항목을 누르면 → 현재 상태로 입력되고 아래 **칩**으로 쌓인다. 칩의 `✕` 로 취소.
 - 이미 찍은 사람은 검색에서 사라진다(중복 방지).
 
@@ -113,7 +113,7 @@ const dates=["2026-06-28","2026-07-05","2026-07-12","2026-07-19"];
 const ins=db.prepare("INSERT OR REPLACE INTO attendance(member_id,service_date,status) VALUES(?,?,?)");
 // 예: 1번=개근, 3번=뒤 3주 비출석(연속결석 강조 대상)
 [["before","before","after","before"]].forEach(a=>a.forEach((s,i)=>ins.run(1,dates[i],s)));
-[["before","etc","etc",null]].forEach(a=>a.forEach((s,i)=>{if(s)ins.run(3,dates[i],s)}));
+[["before","main","main",null]].forEach(a=>a.forEach((s,i)=>{if(s)ins.run(3,dates[i],s)}));
 console.log("seeded");
 '
 ```
