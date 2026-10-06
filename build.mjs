@@ -180,6 +180,8 @@ echo 서버가 종료되었습니다.
 pause
 `;
   writeFileSync(resolve(out, launcher), startBat);
+  // 서버를 끈 채 DB와 실행파일을 backup/ 에 담고, 필요하면 그대로 되돌린다.
+  for (const f of ['백업.bat', '복구.bat']) copyFileSync(resolve(root, 'scripts', 'release-kit', f), resolve(out, f));
 } else {
   const startCommand = `#!/bin/bash
 cd "$(dirname "$0")"
@@ -201,8 +203,8 @@ read -n1 -rp "아무 키나 누르면 창이 닫힙니다..."
 }
 
 // If this release folder was ever used to run the server, it now holds real
-// passwords and attendance data. Never wrap that into a distributable zip.
-const leaks = ['config.json', 'data'].filter((f) => existsSync(resolve(out, f)));
+// passwords and attendance data (backups included). Never wrap that into a distributable zip.
+const leaks = ['config.json', 'data', 'backup'].filter((f) => existsSync(resolve(out, f)));
 
 console.log('[+] packaging zip...');
 const zipPath = leaks.length ? null : packageZip();
