@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { MIGRATIONS, migrate, userVersion, type Migration } from './migrate.js';
+import { MIGRATIONS, ensureCurrent, migrate, pendingSteps, SchemaBehindError, userVersion, type Migration } from './migrate.js';
 
 const LATEST = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 
@@ -88,4 +88,44 @@ test('v3: 예배 축의 `기타` 행은 지우고 다른 행은 남기며, 이�
   assert.throws(() =>
     db.exec("INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at) VALUES (1, '2026-09-27', 'etc', '성도', '길동속')"),
   );
+});
+
+// ---------------------------------------------------------------------------
+// 자동 마이그레이션은 빈 DB에서만 한다. 데이터가 든 DB는 명시적으로만 올린다(--migrate).
+// ---------------------------------------------------------------------------
+test('ensureCurrent: 빈 DB는 최신 스키마로 바로 만든다', () => {
+  const db = new DatabaseSync(':memory:');
+
+  ensureCurrent(db);
+  assert.equal(userVersion(db), LATEST);
+});
+
+test('ensureCurrent: 버전이 낮은 DB는 올리지 않고 멈춘다', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, MIGRATIONS.filter((m) => m.version <= 2));
+  db.exec("INSERT INTO member (name, stage, sok, role) VALUES ('홍길동', '성도', '길동속', '속장')");
+
+  assert.throws(() => ensureCurrent(db), SchemaBehindError);
+  assert.equal(userVersion(db), 2, '아무것도 바꾸지 않아야 한다');
+});
+
+test('ensureCurrent: 최신 DB는 그대로 연다', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db);
+
+  assert.doesNotThrow(() => ensureCurrent(db));
+});
+
+test('pendingSteps: 올라갈 단계마다 하는 일을 적고, v3은 지울 기타 행 수를 센다', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, MIGRATIONS.filter((m) => m.version <= 2));
+  db.exec("INSERT INTO member (id, name, stage, sok, role) VALUES (1, '홍길동', '성도', '길동속', '속장')");
+  db.exec(`INSERT INTO attendance (member_id, service_date, status, stage_at, sok_at) VALUES
+    (1, '2026-09-06', 'etc', '성도', '길동속'),
+    (1, '2026-09-13', 'etc', '성도', '길동속'),
+    (1, '2026-09-20', 'before', '성도', '길동속')`);
+
+  const steps = pendingSteps(db);
+  assert.deepEqual(steps.map((s) => s.version), [3]);
+  assert.match(steps[0]!.describe, /기타.*2건/);
 });

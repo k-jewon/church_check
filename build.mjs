@@ -180,8 +180,8 @@ echo 서버가 종료되었습니다.
 pause
 `;
   writeFileSync(resolve(out, launcher), startBat);
-  // 서버를 끈 채 DB와 실행파일을 backup/ 에 담고, 필요하면 그대로 되돌린다.
-  for (const f of ['백업.bat', '복구.bat']) copyFileSync(resolve(root, 'scripts', 'release-kit', f), resolve(out, f));
+  // 서버를 끈 채 DB와 실행파일을 backup/ 에 담고 되돌린다. 스키마는 마이그레이션.bat 으로만 올린다.
+  for (const f of ['백업.bat', '복구.bat', '마이그레이션.bat']) copyFileSync(resolve(root, 'scripts', 'release-kit', f), resolve(out, f));
 } else {
   const startCommand = `#!/bin/bash
 cd "$(dirname "$0")"
