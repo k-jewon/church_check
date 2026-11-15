@@ -39,6 +39,22 @@ export async function ensureConfig(): Promise<void> {
     rl.close();
   }
 
+  saveConfig(cfg);
+  console.log('\n암호를 저장했습니다 (config.json).\n');
+}
+
+// 설치 마법사·스크립트가 대화 없이 암호를 넣는 길(`--setpw`). 대화형 설정과 같은 기본값을 쓴다.
+export function setPasswordFromArg(which: string, password: string): void {
+  const key = which === 'input' ? 'inputPasswordHash' : which === 'admin' ? 'adminPasswordHash' : null;
+  if (!key || !password) throw new Error('usage: --setpw <input|admin> <암호>');
+  const cfg: RawConfig = existsSync(CONFIG_PATH)
+    ? (JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) as RawConfig)
+    : {};
+  cfg[key] = hashPassword(password);
+  saveConfig(cfg);
+}
+
+function saveConfig(cfg: RawConfig): void {
   if (!cfg.cookieSecret || cfg.cookieSecret === 'change-me-to-a-long-random-string') {
     cfg.cookieSecret = randomBytes(32).toString('hex');
   }
@@ -46,7 +62,6 @@ export async function ensureConfig(): Promise<void> {
   if (cfg.chromePath === undefined) cfg.chromePath = null;
 
   writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n', 'utf8');
-  console.log('\n암호를 저장했습니다 (config.json).\n');
 }
 
 async function promptPassword(rl: Interface, label: string): Promise<string> {

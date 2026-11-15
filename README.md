@@ -68,7 +68,8 @@ npm run dev          # http://localhost:3000
 ### 사전 준비 (1회)
 1. **Node.js 24.x 설치** — 빌드하려는 OS에서(개발·검증 버전, `node:sqlite` 무플래그 동작, 최소 22.5+). [nodejs.org](https://nodejs.org) → `node -v` 확인.
 2. **macOS만**: `codesign`·`lipo` 필요(Xcode Command Line Tools). 대개 설치돼 있고, 없으면 `xcode-select --install`.
-3. 소스 가져오기 + **빌드 도구 포함** 의존성 설치:
+3. **Windows 빌드 머신만**: 설치 마법사(`setup.exe`)를 만들려면 Inno Setup를 1회 설치 — `winget install --id JRSoftware.InnoSetup`. 없으면 setup.exe 없이 zip만 나온다.
+4. 소스 가져오기 + **빌드 도구 포함** 의존성 설치:
    ```
    git clone https://github.com/k-jewon/church_check.git
    cd church_check
@@ -83,32 +84,42 @@ esbuild 번들 → SEA blob 생성 → 런타임 복사·서명 → blob 주입 
 ```
 release/
 ├── church_check(.exe)              # Node 런타임 내장 (Chromium 미포함, ~90–130MB)
-├── 서버실행.bat / .command       # 더블클릭 실행 (OS별)
+├── 서버실행.bat / .command       # 더블클릭 실행 (OS별) — 콘솔 창 모드
+├── electron/  shell/             # Windows: Electron 운영 창(서버 시작·멈춤·업데이트·암호 변경). zip에는 안 들어감
+├── 서버시작.vbs                  # Windows: electron이 없을 때 폴백 — 콘솔 창 없이 서버를 켜고 브라우저 창을 열기
+├── 서버멈춤.bat                  # Windows: hidden 서버와 터널 자식을 함께 멈춤
 ├── 백업.bat / 복구.bat           # 서버를 끈 채 DB·실행파일 백업과 되돌리기 (Windows)
 ├── 마이그레이션.bat               # 백업한 뒤 DB 스키마를 올린다 (Windows)
+├── 업데이트.bat / 업데이트.ps1   # 최신 릴리스로 실행파일·자산만 교체 (config.json·data 보존)
 ├── cloudflared(.exe)               # 폰 접속(QR) 터널 — 자동 동봉
 ├── public/  template/              # 정적 자산 (실행파일 옆에 있어야 함)
 └── config.example.json
 ```
 중간 산출물은 `build/` 에서 만들고 빌드 끝에 지운다. cloudflared 는 `.cache/` 에 보관돼 재빌드 시 다시 받지 않는다. `dist/` 는 `npm run build`(tsc) 전용이라 배포와 섞이지 않는다.
 
-같은 내용을 담은 **배포용 zip**(`church_check-<버전>-win.zip` / `-mac-arm64.zip`)도 프로젝트 루트에 함께 생성된다. 압축을 풀면 버전명 폴더 하나가 나온다(약 52MB → 해제 시 ~151MB).
+같은 내용을 담은 **배포용 zip**(`church_check-<버전>-win.zip` / `-mac-arm64.zip`)도 프로젝트 루트에 함께 생성된다. 압축을 풀면 버전명 폴더 하나가 나온다(약 52MB → 해제 시 ~151MB). zip에는 서버 자산만 담는다 — Electron은 setup.exe에만 동봉된다.
+
+Windows 빌드 머신에는 **설치 마법사**(`church_check-<버전>-win-setup.exe`, 소스는 `installer.nsi`)도 같은 루트에 생성된다. `%LOCALAPPDATA%\church_check`에 깔고 시작 메뉴에 `church_check` 폴더를 등록하며(ProgramFiles는 최초 실행이 `config.json`·`data/`를 못 써서 UAC가 걸린다), 설치 중 입력용·관리자 암호를 받아 `church_check.exe --setpw <input|admin> <암호>`로 `config.json`을 미리 만든다. 대상 PC에서는 node·npm 설치 필요가 없다(실행파일에 Node 런타임이 들어 있다). 제거는 제어판 프로그램 목록에서 하고, 설치 파일이 넣지 않은 `config.json`·`data/`는 지우지 않는다. 빌드 머신에 `electron`(devDependency)이 있으면 운영 창(`electron/` + `shell/`)을 함께 동봉한다 — 없으면 `서버시작.vbs` 폴백으로 설치되고 setup.exe 크기가 작게 나온다.
 
 ### 배포 (GitHub Releases)
 비개발자에게는 **저장소가 아니라 릴리스 zip**을 준다. `git clone` 으로는 실행파일을 받을 수 없다(`release/` 는 git 에 올리지 않는다 — exe 99MB 가 GitHub 파일당 100MB 제한에 걸리고, 빌드할 때마다 저장소가 불어난다).
 
 ```
 npm run build:exe
-gh release create v0.1.0 church_check-0.1.0-win.zip --title "v0.1.0" --notes "..."
+gh release create v0.1.0 church_check-0.1.0-win-setup.exe church_check-0.1.0-win.zip --title "v0.1.0" --notes "..."
 # 이미 있는 릴리스에 추가(예: mac 빌드를 나중에 올릴 때)
 gh release upload v0.1.0 church_check-0.1.0-mac-arm64.zip
 ```
-Windows·macOS 는 각 OS 에서 빌드해 **같은 릴리스에 zip 두 개**를 올린다. 버전은 `package.json` 의 `version` 을 따르므로, 새 버전을 낼 때 그 값을 먼저 올린다.
+Windows·macOS 는 각 OS 에서 빌드해 **같은 릴리스에 자산**을 올린다. 버전은 `package.json` 의 `version` 을 따르므로, 새 버전을 낼 때 그 값을 먼저 올린다.
 
-받는 사람 안내:
-1. 릴리스 페이지에서 자기 OS 용 zip 다운로드.
-2. **압축을 반드시 푼다.** zip 안에서 바로 실행하면 임시 폴더에서 돌아가 `config.json`·`data/` 가 엉뚱한 곳에 생긴다.
-3. 풀린 폴더의 `서버실행.bat`(macOS 는 `서버실행.command`) 더블클릭.
+받는 사람 안내(Windows):
+1. 릴리스 페이지에서 `*-win-setup.exe` 다운로드 → 더블클릭.
+2. SmartScreen에 "More info" → "Run anyway"(무서명이라 1회). 마법사에서 **입력용·관리자 암호**를 입력하면 `config.json`이 미리 만들어진다 — 첫 실행의 암호 질문이 없다.
+3. 시작 메뉴의 `church_check` → **church_check 열기** 더블클릭. **운영 창**(`church_check 운영`)이 열린다 — 이 창에 서버 시작·멈춤·업데이트·암호 변경·출석 화면·폰 접속(QR) 버튼이 있고, 콘솔 창은 뜨지 않는다. 설치 위치는 `%LOCALAPPDATA%\church_check`(node·npm 설치 불필요).
+4. 서버를 닫을 때는 운영 창의 **서버 멈춤**(시작 메뉴의 `church_check 서버 멈춤`도 같은 동작). 터널 자식(cloudflared)까지 함께 멈춘다. 폰 접속 QR은 운영 창의 **폰 접속(QR)** 버튼으로 창이 열리고(QR 이미지가 화면에 표시된다), 관리자 로그인이 되어 있으면 바로 QR가 보인다 — 로그인되어 있지 않으면 그 창에서 먼저 로그인하면 QR 화면으로 이어진다.
+5. 새 버전은 운영 창의 **업데이트**(먼저 서버를 멈추고 실행파일·자산만 교체 — `config.json`·`data/` 보존) 또는 같은 setup.exe를 다시 실행. 릴리스가 아직 없거나 새 자산이 없으면 **최신입니다**로 표시된다(실패가 아니다). 암호를 바꿀 때도 운영 창에서 **암호 저장**을 누른다(서버를 먼저 멈추고 `config.json`에 저장한다).
+
+macOS나 setup.exe 없는 경우: 자기 OS 용 zip을 받아 ** 반드시 압축을 풀고** 폴더의 `서버실행.command`를 실행한다(zip 안에서 바로 실행하면 임시 폴더에서 돌아가 `config.json`·`data/`가 엉뚱한 곳에 생긴다).
 
 **PDF는 PC에 설치된 Chrome/Edge를 사용**한다(Windows는 Edge 기본 탑재, macOS는 Chrome 등 필요). 실행파일에 Chromium을 넣지 않아 용량을 줄였다. 표준 경로에 없으면 `config.json` 의 `chromePath` 로 지정한다.
 

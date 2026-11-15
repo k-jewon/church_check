@@ -1,4 +1,4 @@
-import { ensureConfig } from './setup/bootstrap.js';
+import { ensureConfig, setPasswordFromArg } from './setup/bootstrap.js';
 
 // Bootstrap entry. First-run password setup MUST finish before config.js (and
 // anything importing it: db, auth, routes) loads, so those are pulled in via
@@ -9,6 +9,14 @@ async function main(): Promise<void> {
   if (process.argv.includes('--migrate')) {
     const { runMigrateCli } = await import('./db/migrate-cli.js');
     process.exit(await runMigrateCli());
+  }
+
+  // 설치 마법사(--setpw)는 서버를 띄우지 않고 config.json만 쓴다. 설치 위치를 cwd로 잡는다.
+  const setpw = process.argv.indexOf('--setpw');
+  if (setpw > 0) {
+    setPasswordFromArg(process.argv[setpw + 1] ?? '', process.argv[setpw + 2] ?? '');
+    console.log(`config.json에 ${process.argv[setpw + 1]} 암호를 저장했습니다.`);
+    process.exit(0);
   }
 
   await ensureConfig();

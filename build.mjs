@@ -179,9 +179,15 @@ echo.
 echo 서버가 종료되었습니다.
 pause
 `;
-  writeFileSync(resolve(out, launcher), startBat);
+  // cmd 배치는 CRLF가 필수: LF만 있으면 한글 줄이 줄 경계로 안 갈려 명령으로 오해된다
+  // ('...' is not recognized). macOS .command는 LF 유지.
+  writeFileSync(resolve(out, launcher), startBat.replace(/\n/g, '\r\n'));
   // 서버를 끈 채 DB와 실행파일을 backup/ 에 담고 되돌린다. 스키마는 마이그레이션.bat 으로만 올린다.
-  for (const f of ['백업.bat', '복구.bat', '마이그레이션.bat']) copyFileSync(resolve(root, 'scripts', 'release-kit', f), resolve(out, f));
+  // release-kit 배치는 CRLF 필수(LF면 cmd가 한글 줄을 명령으로 오해한다). 복사할 때 정규화한다.
+  for (const f of ['백업.bat', '복구.bat', '마이그레이션.bat', '업데이트.bat', '업데이트.ps1', '서버시작.vbs', '서버멈춤.bat']) {
+    const src = resolve(root, 'scripts', 'release-kit', f);
+    writeFileSync(resolve(out, f), readFileSync(src, 'utf8').replace(/\r?\n/g, '\r\n'));
+  }
 } else {
   const startCommand = `#!/bin/bash
 cd "$(dirname "$0")"
@@ -208,6 +214,13 @@ const leaks = ['config.json', 'data', 'backup'].filter((f) => existsSync(resolve
 
 console.log('[+] packaging zip...');
 const zipPath = leaks.length ? null : packageZip();
+
+console.log('[+] bundling electron shell...');
+const hasElectron = isWin ? bundleElectronShell() : false;
+
+console.log('[+] building installer...');
+const setupPath = isWin ? buildInstaller() : null;
+if (!isWin) console.log('   macOS용 setup 은 macOS 에서 빌드하세요 (SEA 크로스 컴파일 불가).');
 
 console.log('[+] cleaning intermediates...');
 rmSync(work, { recursive: true, force: true });
@@ -238,6 +251,64 @@ function packageZip() {
   return zip;
 }
 
+// Electron 운영 창 껍질을 release 폴더에 동봉한다. zip 만들기 뒤에,copy하므로 zip에는
+// electron.exe(250MB)가 들어가지 않는다 — zip은 서버 자산만 담는다.
+// shortcut: electron 미동봉 시 setup.exe는 서버시작.vbs 런처로 폴백 (installer.nsi의 HAS_ELECTRON)
+function bundleElectronShell() {
+  const dist = resolve(root, 'node_modules', 'electron', 'dist');
+  const has = existsSync(resolve(dist, 'electron.exe'));
+  if (has) {
+    cpSync(dist, resolve(out, 'electron'), { recursive: true });
+    console.log('   electron/ 동봉 (운영 창)');
+  } else {
+    console.warn('   [warn] node_modules/electron/dist/electron.exe 를 찾지 못했습니다 — 운영 창 없이 vbs 런처로 폴백합니다.');
+    console.warn('   [warn] npm install 한 번(electron devDependency) 하면 다음 빌드부터 운영 창이 설치됩니다.');
+  }
+  cpSync(resolve(root, 'shell'), resolve(out, 'shell'), { recursive: true });
+  return has;
+}
+
+// Inno Setup 설치 마법사: release 폴더를 %LOCALAPPDATA%\church_check 에 까는 setup.exe.
+// 대상 PC에서는 node·npm이 필요 없다(exe에 SEA 런타임 내장). 빌드 머신에 Inno Setup이
+// 없으면 setup.exe를 만들지 않고 zip만 둔다.
+// shortcut: ISCC가 있는 빌드 머신에서만 setup.exe, 없는 경우 zip 배포로 대체
+function buildInstaller() {
+  const iscc = findIscc();
+  if (!iscc) {
+    console.warn('   [warn] Inno Setup(ISCC.exe) 을 찾지 못했습니다 — setup.exe 를 만들지 않았습니다.');
+    console.warn('   [warn] winget install --id JRSoftware.InnoSetup 한 번 설치하면 다음 빌드부터 만들어집니다.');
+    return null;
+  }
+  const version = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).version;
+  // HAS_ELECTRON이 시작 메뉴·설치 직후 런처를 electron 운영 창으로 고른다(없으면 기존 vbs).
+  execFileSync(iscc, ['/DAPP_VERSION=' + version, ...(hasElectron ? ['/DHAS_ELECTRON=1'] : []), 'installer.nsi'], {
+    stdio: 'inherit',
+  });
+  const setup = resolve(root, `church_check-${version}-win-setup.exe`);
+  if (!existsSync(setup)) throw new Error(`installer compile finished but ${setup} is missing`);
+  console.log(`   church_check-${version}-win-setup.exe (${(readFileSync(setup).length / 1048576).toFixed(1)} MB)`);
+  return setup;
+}
+
+function findIscc() {
+  // winget 은 사용자 설치로 %LOCALAPPDATA%\Programs 에 넣는다 — 신규 셸 PATH 갱신 전에도 찾는다.
+  const known = [
+    'C:\\Program Files\\Inno Setup 6\\ISCC.exe',
+    'C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe',
+    process.env.LOCALAPPDATA ? resolve(process.env.LOCALAPPDATA, 'Programs', 'Inno Setup 6', 'ISCC.exe') : null,
+  ];
+  const found = known.find((p) => p && existsSync(p));
+  if (found) return found;
+  try {
+    return execFileSync('cmd.exe', ['/c', 'where', 'ISCC.exe'], { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
+      .split('\n')[0];
+  } catch {
+    return null;
+  }
+}
+
 const binName = isWin ? 'church_check.exe' : 'church_check';
 const cfName = isWin ? 'cloudflared.exe' : 'cloudflared';
 const cfPart = existsSync(resolve(out, cfName)) ? ` · ${cfName}` : '';
@@ -245,6 +316,7 @@ console.log(`\nDone. Release folder: ${out}`);
 console.log(`  ${binName} · ${launcher} · public/ · template/ · config.example.json${cfPart}`);
 console.log(`Hand this folder over as-is; the user runs ${launcher}.`);
 if (zipPath) console.log(`Or upload the zip: gh release create v${JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).version} "${zipPath}"`);
+if (setupPath) console.log(`Or upload the installer: gh release upload v<버전> "${setupPath}" — 비개발자는 setup.exe 하나로 설치 끝(node·npm 설치 불필요)`);
 console.log('First run: the app prompts for input/admin passwords and writes config.json.');
 
 if (leaks.length) {

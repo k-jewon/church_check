@@ -1,0 +1,5 @@
+{
+  "name": "church_check-shell",
+  "private": true,
+  "main": "main.cjs"
+}
