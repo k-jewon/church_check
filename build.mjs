@@ -235,6 +235,10 @@ function packageZip() {
   const stage = resolve(work, pkgName);
   const zip = resolve(root, `${pkgName}.zip`);
   cpSync(out, stage, { recursive: true });
+  // electron/ 은 zip에서 제외한다: 운영 창 실행파일은 창이 살아 있는 동안 잠겨 있어 교체가 안 된다.
+  // 창 코드(shell/ )는 zip에 넣는다 — 재시작하면 새 코드가 적용된다. Electron 버전 변경은 setup.exe 재설치.
+  cpSync(resolve(root, 'shell'), resolve(stage, 'shell'), { recursive: true });
+  rmSync(resolve(stage, 'electron'), { recursive: true, force: true });
   rmSync(zip, { force: true });
   if (isWin) {
     execFileSync('powershell', [
@@ -251,8 +255,8 @@ function packageZip() {
   return zip;
 }
 
-// Electron 운영 창 껍질을 release 폴더에 동봉한다. zip 만들기 뒤에,copy하므로 zip에는
-// electron.exe(250MB)가 들어가지 않는다 — zip은 서버 자산만 담는다.
+// Electron 운영 창 껍질을 release 폴더에 동봉한다. zip에는 electron을 넣지 않는다 — packageZip이
+// stage에서 electron/ 을 지운다(이전 빌드의 잔여가 release/ 에 남아 있어도 제외된다).
 // shortcut: electron 미동봉 시 setup.exe는 서버시작.vbs 런처로 폴백 (installer.nsi의 HAS_ELECTRON)
 function bundleElectronShell() {
   const dist = resolve(root, 'node_modules', 'electron', 'dist');
